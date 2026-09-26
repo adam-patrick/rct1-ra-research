@@ -6,6 +6,10 @@ phase2/state_reader/rct1_state_reader
 phase2/state_reader/rct1_state_scanner
 phase2/state_reader/rct1_value_scan
 
+# Runtime GUI scan/session output
+gui/sessions/
+__pycache__/
+
 # Local/editor and OS metadata
 .DS_Store
 *.swp

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "builds": {
+    "bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76": {
+      "locations": [
+        {"id": "cash", "label": "Cash", "module": "RCT.EXE", "offset": "0x69c590", "type": "u32", "scale": "raw / 10", "status": "validated", "confidence": "medium"},
+        {"id": "guest_count", "label": "Guest Count", "module": "RCT.EXE", "offset": "0x69c9f8", "type": "u16", "scale": "direct", "status": "validated", "confidence": "medium"},
+        {"id": "park_rating", "label": "Park Rating", "module": "RCT.EXE", "offset": "0x69ce64", "type": "u16", "scale": "direct", "status": "validated", "confidence": "medium"}
+      ]
+    }
+  }
+}
