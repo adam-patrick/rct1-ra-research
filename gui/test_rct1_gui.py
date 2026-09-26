@@ -16,6 +16,26 @@ class GuiLogicTests(unittest.TestCase):
             self.assertEqual(store.load()["builds"][SUPPORTED_BUILD]["locations"][0]["id"], "x")
     def test_candidate_delta(self):
         c = Candidate(1, 1, "u16", 9, 4); self.assertEqual(c.delta, 5)
+        self.assertEqual(c.history, [4, 9])
+
+    def test_scan_range_is_module_relative(self):
+        class Provider:
+            info = type("Info", (), {"pid": 7, "base": 0x400000, "build_hash": SUPPORTED_BUILD})()
+            def mappings(self): return [(0x400000, 0x400008)]
+            def read(self, address, size): return (1).to_bytes(2, "little") * (size // 2)
+        engine = SearchEngine(Provider()); engine.scan("exact", 1, ["u16"], scan_start=4, scan_end=6)
+        self.assertEqual(len(engine.candidates), 1)
+        self.assertEqual(engine.candidates[0].relative, 4)
+
+    def test_scan_range_filters_existing_candidates(self):
+        class Provider:
+            info = type("Info", (), {"pid": 7, "base": 0x400000, "build_hash": SUPPORTED_BUILD})()
+            def mappings(self): return [(0x400000, 0x400008)]
+            def read(self, address, size): return (1).to_bytes(2, "little") * (size // 2)
+        engine = SearchEngine(Provider())
+        engine.candidates = [Candidate(0x400000, 0, "u16", 1, 1), Candidate(0x400004, 4, "u16", 1, 1)]
+        engine.scan("unchanged", type_names=["u16"], scan_start=4, scan_end=6)
+        self.assertEqual([candidate.relative for candidate in engine.candidates], [4])
     def test_session_is_build_scoped(self):
         class Provider:
             info = type("Info", (), {"pid": 7, "base": 0x500000, "build_hash": SUPPORTED_BUILD})()

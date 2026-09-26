@@ -15,6 +15,8 @@ class App(tk.Tk):
         self.scanning = False
         self.continuous = tk.BooleanVar(value=False)
         self.continuous_job = None
+        self.sort_column = None
+        self.sort_reverse = False
         self._build(); self.after(1000, self.refresh_status)
     def _build(self):
         status = ttk.LabelFrame(self, text="Process / Game Status"); status.pack(fill="x", padx=8, pady=8)
@@ -28,15 +30,19 @@ class App(tk.Tk):
         self.mode = ttk.Combobox(controls, values=["exact", "unknown", "changed", "unchanged", "increased", "decreased", "increased_by", "decreased_by"], state="readonly", width=16); self.mode.set("exact"); self.mode.pack(side="left", padx=4, pady=5)
         self.value = ttk.Entry(controls, width=14); self.value.insert(0, "0"); self.value.pack(side="left", padx=4)
         self.typevar = tk.StringVar(value="u16"); ttk.Combobox(controls, textvariable=self.typevar, values=list(TYPES), state="readonly", width=7).pack(side="left", padx=4)
+        ttk.Label(controls, text="Range +").pack(side="left", padx=(8, 2)); self.range_start = ttk.Entry(controls, width=9); self.range_start.pack(side="left")
+        ttk.Label(controls, text="to").pack(side="left", padx=2); self.range_end = ttk.Entry(controls, width=9); self.range_end.pack(side="left")
         self.scan_button = ttk.Button(controls, text="Run scan/filter", command=self.run_scan); self.scan_button.pack(side="left", padx=4)
         ttk.Button(controls, text="Cancel", command=self.cancel_scan).pack(side="left", padx=4)
         ttk.Checkbutton(controls, text="Continuous filter (1s)", variable=self.continuous).pack(side="left", padx=4)
         self.progress = ttk.Progressbar(controls, mode="determinate"); self.progress.pack(side="left", fill="x", expand=True, padx=8)
         self.count = tk.StringVar(value="Candidates: 0"); ttk.Label(controls, textvariable=self.count).pack(side="right", padx=5)
         frame = ttk.Frame(self); frame.pack(fill="both", expand=True, padx=8, pady=4)
-        columns = ("address", "relative", "type", "current", "previous", "delta", "label", "status")
+        columns = ("address", "relative", "type", "current", "previous", "delta", "history", "label", "status")
         self.table = ttk.Treeview(frame, columns=columns, show="headings", selectmode="extended")
-        for col in columns: self.table.heading(col, text=col.replace("_", " ").title()); self.table.column(col, width=120)
+        for col in columns:
+            self.table.heading(col, text=col.replace("_", " ").title(), command=lambda column=col: self.sort_candidates(column))
+            self.table.column(col, width=120)
         self.table.pack(side="left", fill="both", expand=True); self.table.bind("<<TreeviewSelect>>", self.inspect)
         scroll = ttk.Scrollbar(frame, command=self.table.yview); scroll.pack(side="right", fill="y"); self.table.configure(yscrollcommand=scroll.set)
         bottom = ttk.Frame(self); bottom.pack(fill="x", padx=8, pady=5)
@@ -66,11 +72,15 @@ class App(tk.Tk):
             return messagebox.showwarning("Continuous filter", "Continuous mode is available for refinement filters only.")
         if self.engine is None or self.engine.provider.info.pid != self.info.pid: self.engine = SearchEngine(self.provider, lambda done,total: self.after(0, lambda: self.progress.configure(value=(done / total * 100) if total else 0)))
         value = int(self.value.get(), 0) if mode not in ("unknown",) else None
+        scan_start = int(self.range_start.get(), 0) if self.range_start.get().strip() else None
+        scan_end = int(self.range_end.get(), 0) if self.range_end.get().strip() else None
+        if scan_start is not None and scan_end is not None and scan_end <= scan_start:
+            return messagebox.showwarning("Scan range", "Range end must be greater than range start.")
         self.progress.configure(value=0); self.engine.cancel.clear(); self.scanning = True; self.scan_button.configure(state="disabled")
-        threading.Thread(target=self._scan_thread, args=(mode, value), daemon=True).start()
-    def _scan_thread(self, mode, value):
+        threading.Thread(target=self._scan_thread, args=(mode, value, scan_start, scan_end), daemon=True).start()
+    def _scan_thread(self, mode, value, scan_start, scan_end):
         try:
-            self.engine.scan(mode, value, [self.typevar.get()], value or 0 if mode.endswith("_by") else 0)
+            self.engine.scan(mode, value, [self.typevar.get()], value or 0 if mode.endswith("_by") else 0, scan_start, scan_end)
             self.after(0, lambda: self.populate(mode))
         except Exception as error:
             self.after(0, lambda: self.scan_failed(error))
@@ -92,14 +102,34 @@ class App(tk.Tk):
             message = f" ({self.engine.scan_message})" if self.engine and self.engine.scan_message else ""
             self.count.set(f"Candidates: {count:,}{message}")
         candidates = self.engine.candidates if self.engine else []
-        for index, c in enumerate(candidates[:MAX_DISPLAY_ROWS]):
-            self.table.insert("", "end", iid=str(index), values=(f"0x{c.address:08x}", f"+0x{c.relative:x}", c.type_name, c.current, c.previous, c.delta, c.label, c.status))
+        indexed = list(enumerate(candidates))
+        if self.sort_column:
+            indexed.sort(key=lambda item: self.sort_key(item[1], self.sort_column), reverse=self.sort_reverse)
+        for index, c in indexed[:MAX_DISPLAY_ROWS]:
+            history = ",".join(str(value) for value in c.history[-8:])
+            self.table.insert("", "end", iid=str(index), values=(f"0x{c.address:08x}", f"+0x{c.relative:x}", c.type_name, c.current, c.previous, c.delta, history, c.label, c.status))
         if len(candidates) > MAX_DISPLAY_ROWS:
             self.count.set(f"Candidates: {len(candidates):,} (showing first {MAX_DISPLAY_ROWS:,}; narrow the scan before inspecting)")
         if (self.continuous.get() and completed_mode in CONTINUOUS_MODES and
                 self.engine and not self.engine.cancel.is_set() and self.info and
                 self.engine.provider.info.pid == self.info.pid):
             self.continuous_job = self.after(1000, self.run_scan)
+    def sort_key(self, candidate, column):
+        if column == "address": return candidate.address
+        if column == "relative": return candidate.relative
+        if column == "type": return candidate.type_name
+        if column == "current": return candidate.current
+        if column == "previous": return candidate.previous
+        if column == "delta": return candidate.delta
+        if column == "history": return tuple(candidate.history)
+        if column == "label": return candidate.label.lower()
+        return candidate.status.lower()
+    def sort_candidates(self, column):
+        if self.sort_column == column:
+            self.sort_reverse = not self.sort_reverse
+        else:
+            self.sort_column, self.sort_reverse = column, False
+        self.populate()
     def selected(self):
         return [self.engine.candidates[int(x)] for x in self.table.selection()]
     def inspect(self, _event=None):

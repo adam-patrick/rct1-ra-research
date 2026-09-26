@@ -12,7 +12,7 @@ import json
 import os
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -42,6 +42,11 @@ class Candidate:
     previous: int
     label: str = ""
     status: str = "candidate"
+    history: list[int] = field(default_factory=list)
+
+    def __post_init__(self):
+        if not self.history:
+            self.history = [self.current] if self.current == self.previous else [self.previous, self.current]
 
     @property
     def delta(self) -> int:
@@ -139,8 +144,16 @@ class SearchEngine:
         self.truncated = False
         self.scan_message = ""
 
-    def scan(self, mode: str, value: int | None = None, type_names: list[str] | None = None, delta: int = 0):
+    def scan(self, mode: str, value: int | None = None, type_names: list[str] | None = None,
+             delta: int = 0, scan_start: int | None = None, scan_end: int | None = None):
         types = type_names or list(TYPES)
+        absolute_start, absolute_end = self._absolute_range(scan_start, scan_end)
+        ranges = self.provider.mappings()
+        if absolute_start is not None or absolute_end is not None:
+            absolute_start = absolute_start if absolute_start is not None else 0
+            ranges = [(max(lo, absolute_start), min(hi, absolute_end) if absolute_end is not None else hi)
+                      for lo, hi in ranges]
+            ranges = [(lo, hi) for lo, hi in ranges if hi > lo]
         self.truncated = False
         self.scan_message = ""
         if mode == "unknown":
@@ -152,7 +165,7 @@ class SearchEngine:
             self.baseline = []
             self.baseline_types = types
             captured = 0
-            for lo, hi in self.provider.mappings():
+            for lo, hi in ranges:
                 for address in range(lo, hi, 1024 * 1024):
                     if self.cancel.is_set(): return
                     if captured >= MAX_BASELINE_BYTES:
@@ -170,7 +183,7 @@ class SearchEngine:
         if mode == "exact":
             self.candidates = []
             self.baseline = []
-            for lo, hi in self.provider.mappings():
+            for lo, hi in ranges:
                 for address in range(lo, hi, 1024 * 1024):
                     if self.cancel.is_set(): return
                     end = min(address + 1024 * 1024, hi)
@@ -181,17 +194,22 @@ class SearchEngine:
                         for off in range(0, len(data) - width + 1):
                             current = interpret(data[off:off + width], name)
                             if mode == "unknown" or current == value:
-                                self.candidates.append(Candidate(address + off, address + off - self.provider.info.base, name, current, current))
+                                self.candidates.append(Candidate(address + off, address + off - self.provider.info.base, name, current, current, history=[current]))
                     self.progress(address - lo, hi - lo)
         elif self.baseline and mode == "unchanged":
             # Most memory remains unchanged. Keep the newer snapshot in place
             # and defer candidate creation until a selective filter is used.
-            for index, (lo, previous_bytes) in enumerate(self.baseline):
+            refined = []
+            for lo, previous_bytes in self.baseline:
                 if self.cancel.is_set(): return
-                try: current_bytes = self.provider.read(lo, len(previous_bytes))
+                read_lo = max(lo, absolute_start) if absolute_start is not None else lo
+                read_hi = min(lo + len(previous_bytes), absolute_end) if absolute_end is not None else lo + len(previous_bytes)
+                if read_hi <= read_lo: continue
+                try: current_bytes = self.provider.read(read_lo, read_hi - read_lo)
                 except OSError: continue
-                self.baseline[index] = (lo, current_bytes)
-                self.progress(lo, lo + len(current_bytes))
+                refined.append((read_lo, current_bytes))
+                self.progress(read_lo, read_hi)
+            self.baseline = refined
             self.candidates = []
             self.scan_message = "Unchanged snapshot retained; candidates deferred"
         elif self.baseline:
@@ -203,7 +221,9 @@ class SearchEngine:
                 except OSError: continue
                 for name in self.baseline_types:
                     width = TYPES[name][0]
-                    for off in range(0, len(previous_bytes) - width + 1, width):
+                    start = max(0, (absolute_start or lo) - lo)
+                    end = min(len(previous_bytes), (absolute_end or (lo + len(previous_bytes))) - lo)
+                    for off in range(start - (start % width), end - width + 1, width):
                         previous = interpret(previous_bytes[off:off + width], name)
                         current = interpret(current_bytes[off:off + width], name)
                         d = current - previous
@@ -211,7 +231,7 @@ class SearchEngine:
                               "decreased": d < 0, "increased_by": d == delta,
                               "decreased_by": d == -delta}.get(mode, False)
                         if ok:
-                            kept.append(Candidate(lo + off, lo + off - self.provider.info.base, name, current, previous))
+                            kept.append(Candidate(lo + off, lo + off - self.provider.info.base, name, current, previous, history=[previous, current]))
                             if len(kept) >= MAX_CANDIDATES:
                                 self.truncated = True
                                 self.scan_message = f"Results limited to {MAX_CANDIDATES:,} candidates"
@@ -226,6 +246,8 @@ class SearchEngine:
             kept = []
             for candidate in self.candidates:
                 if self.cancel.is_set(): return
+                if absolute_start is not None and candidate.address < absolute_start: continue
+                if absolute_end is not None and candidate.address >= absolute_end: continue
                 try: current = interpret(self.provider.read(candidate.address, TYPES[candidate.type_name][0]), candidate.type_name)
                 except OSError: continue
                 d = current - candidate.current
@@ -233,8 +255,15 @@ class SearchEngine:
                       "decreased": d < 0, "increased_by": d == delta,
                       "decreased_by": d == -delta}.get(mode, False)
                 if ok:
-                    kept.append(Candidate(candidate.address, candidate.relative, candidate.type_name, current, candidate.current, candidate.label, candidate.status))
+                    kept.append(Candidate(candidate.address, candidate.relative, candidate.type_name, current, candidate.current, candidate.label, candidate.status, candidate.history + [current]))
             self.candidates = kept
+
+    def _absolute_range(self, scan_start: int | None, scan_end: int | None) -> tuple[int | None, int | None]:
+        start = self.provider.info.base + scan_start if scan_start is not None else None
+        end = self.provider.info.base + scan_end if scan_end is not None else None
+        if start is not None and end is not None and end <= start:
+            raise ValueError("scan range end must be greater than scan range start")
+        return start, end
 
     def save_session(self, path: Path) -> None:
         payload = {"version": 1, "pid": self.provider.info.pid, "base": self.provider.info.base,

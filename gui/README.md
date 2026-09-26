@@ -30,6 +30,13 @@ addresses are always displayed both absolutely and as module-relative offsets.
 Use Add bookmark for a research candidate and Watch selected for occasional
 manual refresh.
 
+Searches may optionally specify a module-relative range such as `0x69c000`
+to `0x69d000`. The range applies to new scans and existing candidate/baseline
+filters. Candidate rows retain a compact value history across filters, which
+is useful for comparing scenario signatures. Click any table heading to sort
+ascending; click it again to reverse the sort. The table shows the most recent
+history samples for each displayed candidate.
+
 The `Continuous filter (1s)` option repeats a refinement filter after each
 pass completes, with a one-second delay between passes. It never overlaps
 scans, does not automate game input, and is available only for Changed,
