@@ -27,6 +27,24 @@ validated achievement implementation.
 **Next milestone:** validate a cash locator across controlled value changes and
 three fresh launches, then investigate guest count and park rating.
 
+## Launching RCT1
+
+The validated runtime uses Proton 10.0 with an isolated prefix under
+`runtime-test/compatdata`. The canonical Steam game directory remains
+untouched. The Steam-supplied installer must already have been run into the
+isolated prefix; the launcher does not create, reinstall, download, or modify
+the runtime or game files.
+
+From the repository root, run:
+
+```sh
+./scripts/launch_rct1.sh
+```
+
+`runtime-test/` is intentionally excluded from Git because it contains the
+local Proton/Wine prefix and installed game files. For the complete setup and
+installation procedure, see the [Phase 2A launch report](reports/rct1_retroachievements_phase2a_launch.md).
+
 ## Project layout
 
 ```text
