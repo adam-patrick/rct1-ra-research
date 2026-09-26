@@ -5,7 +5,10 @@ No game executable, DLL, scenario, or save file is copied here.
 
 The state reader now exposes two empirically validated fields: guest count at
 `RCT.EXE base + 0x69c9f8` and park rating at `RCT.EXE base + 0x69ce64`, both as
-little-endian unsigned 16-bit values. Cash remains unavailable. See the
+little-endian unsigned 16-bit values. Cash is validated as a little-endian
+unsigned 32-bit value at `RCT.EXE base + 0x69c590`, scaled by 10 for display.
+See the
 [Phase 2C guest-count report](../reports/rct1_retroachievements_phase2c_guest_count.md)
 and [Phase 2D park-rating report](../reports/rct1_retroachievements_phase2d_park_rating.md)
+and [Phase 2F cash report](../reports/rct1_retroachievements_phase2f_cash_validation.md)
 for evidence and limitations.

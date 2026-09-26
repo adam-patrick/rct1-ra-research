@@ -21,13 +21,14 @@ validated achievement implementation.
 - Read-only scanning has validated one guest-count field for the supported
   build at `RCT.EXE base + 0x69c9f8` as a little-endian unsigned 16-bit value.
   Park rating is also validated at `RCT.EXE base + 0x69ce64` as a little-endian
-  unsigned 16-bit value. Cash, scenario, and completion locators remain
+  unsigned 16-bit value, and cash at `RCT.EXE base + 0x69c590` as a little-endian
+  unsigned 32-bit value scaled by 10. Scenario and completion locators remain
   unvalidated.
 - The recommended architecture remains an external read-only helper, not an
   injected DLL or binary patch.
 
-**Next milestone:** validate guest count and park rating in one additional fresh
-launch, then investigate scenario/objective state. Cash remains unvalidated.
+**Next milestone:** validate all three fields together in one additional fresh
+launch, then investigate scenario/objective state.
 
 ## Launching RCT1
 
@@ -66,7 +67,8 @@ reports/
 ├── rct1_retroachievements_phase2b_state_discovery.md
 ├── rct1_retroachievements_phase2c_guest_count.md
 ├── rct1_retroachievements_phase2d_park_rating.md
-└── rct1_retroachievements_phase2e_cash_discovery.md
+├── rct1_retroachievements_phase2e_cash_discovery.md
+└── rct1_retroachievements_phase2f_cash_validation.md
 ```
 
 The local `runtime-test/` directory is intentionally excluded from Git. It
