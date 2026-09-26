@@ -21,11 +21,13 @@ int main(void){
  uint16_t guests=0;
  if(read_u16(pid,base+0x69c9f8,&guests)) printf("Guests: %"PRIu16" (u16, base + 0x69c9f8)\n",guests);
  else puts("Guests: unavailable (validated locator could not be read)");
+ uint16_t rating=0;
+ if(read_u16(pid,base+0x69ce64,&rating)) printf("Park Rating: %"PRIu16" (u16, base + 0x69ce64)\n",rating);
+ else puts("Park Rating: unavailable (validated locator could not be read)");
  /* A nearby integer matched one observed cash display, but it was not
     reproduced after the next simulation tick. Keep cash conservative until
     a stable locator is validated across launches. */
  puts("Cash: unavailable (candidate not yet validated)");
- puts("Park Rating: unavailable (locator not yet established)");
  puts("Safety: read-only process_vm_readv; no process write APIs are used.");
  return 0;
 }

@@ -20,12 +20,14 @@ validated achievement implementation.
   `bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76`.
 - Read-only scanning has validated one guest-count field for the supported
   build at `RCT.EXE base + 0x69c9f8` as a little-endian unsigned 16-bit value.
-  Cash, park-rating, scenario, and completion locators remain unvalidated.
+  Park rating is also validated at `RCT.EXE base + 0x69ce64` as a little-endian
+  unsigned 16-bit value. Cash, scenario, and completion locators remain
+  unvalidated.
 - The recommended architecture remains an external read-only helper, not an
   injected DLL or binary patch.
 
-**Next milestone:** validate a cash locator across controlled value changes and
-three fresh launches, then investigate guest count and park rating.
+**Next milestone:** validate guest count and park rating in one additional fresh
+launch, then investigate scenario/objective state. Cash remains unvalidated.
 
 ## Launching RCT1
 
@@ -62,7 +64,8 @@ reports/
 ├── rct1_retroachievements_phase2_runtime.md
 ├── rct1_retroachievements_phase2a_launch.md
 ├── rct1_retroachievements_phase2b_state_discovery.md
-└── rct1_retroachievements_phase2c_guest_count.md
+├── rct1_retroachievements_phase2c_guest_count.md
+└── rct1_retroachievements_phase2d_park_rating.md
 ```
 
 The local `runtime-test/` directory is intentionally excluded from Git. It
@@ -113,16 +116,17 @@ and validated.
 ## Roadmap
 
 1. Validate the guest-count representation once more and preserve snapshot evidence.
-2. Locate and validate park rating, then revisit cash only if useful.
-3. Identify scenario and success/failure state transitions.
-4. Model ride objects well enough to evaluate coaster excitement.
-5. Build a small external state evaluator with executable and scenario
-   identity checks.
-6. Reassess RetroAchievements integration only after the evaluator is stable.
+2. Identify scenario and success/failure state transitions.
+3. Model ride objects well enough to evaluate coaster excitement.
+4. Build a small external state evaluator with executable and scenario
+  identity checks.
+5. Reassess RetroAchievements integration only after the evaluator is stable.
 
 ## Reports
 
 Start with the [feasibility report](reports/rct1_retroachievements_feasibility.md)
 for the target-build analysis, then read the [launch report](reports/rct1_retroachievements_phase2a_launch.md)
 and [state-discovery report](reports/rct1_retroachievements_phase2b_state_discovery.md)
-for the current runtime evidence.
+for the current runtime evidence. The validated guest-count and park-rating
+findings are documented in the [Phase 2C report](reports/rct1_retroachievements_phase2c_guest_count.md)
+and [Phase 2D report](reports/rct1_retroachievements_phase2d_park_rating.md).
