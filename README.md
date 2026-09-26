@@ -1,19 +1,109 @@
 # RCT1 RetroAchievements Research
 
-Research and tooling for investigating RollerCoaster Tycoon Deluxe (RCT1)
-runtime state and RetroAchievements feasibility.
+Research, experiments, and small read-only tools for investigating whether the
+original RollerCoaster Tycoon Deluxe (`RCT.EXE`) can support a reliable
+RetroAchievements integration.
 
-## Contents
+This is an early-stage reverse-engineering and runtime-state discovery project.
+It is deliberately conservative: the current work observes the game and
+documents evidence before attempting achievement logic, injection, patching, or
+network integration.
 
-- `phase2/` — runtime research notes and read-only state-scanning tools
-- `reports/` — launch, feasibility, and state-discovery reports
-- `runtime-test/` — local Proton/Wine runtime data; intentionally excluded from Git
+## Current status
 
-The project does not redistribute the game executable, game data, scenarios,
-saves, or other copyrighted game assets. A local runtime may be required to
-reproduce some experiments.
+The project has reached a reproducible baseline, but it does not yet have a
+validated achievement implementation.
 
-## Status
+- A clean, isolated Proton 10.0 runtime can launch the installer-created Deluxe
+  copy and load the Forest Frontiers scenario.
+- The target executable is the 32-bit `RCT.EXE` build identified by SHA-256
+  `bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76`.
+- Read-only scanning has produced transient cash candidates, but no cash,
+  guest-count, park-rating, scenario, or completion locator has passed stability
+  validation.
+- The recommended architecture remains an external read-only helper, not an
+  injected DLL or binary patch.
 
-Phase 2 launch research established a reproducible isolated Proton runtime and
-reached the Forest Frontiers scenario. State discovery remains in progress.
+**Next milestone:** validate a cash locator across controlled value changes and
+three fresh launches, then investigate guest count and park rating.
+
+## Project layout
+
+```text
+phase2/
+├── README.md                    Phase 2 scope and findings
+└── state_reader/
+    ├── README.md                Reader notes
+    ├── README_scanner.md        Scanner notes and usage
+    ├── rct1_state_reader.c      Conservative process-state reader
+    ├── rct1_state_scanner.c     Read-only memory scanner
+    └── rct1_value_scan.c        Targeted value-scan utility
+
+reports/
+├── rct1_retroachievements_feasibility.md
+├── rct1_retroachievements_phase2_runtime.md
+├── rct1_retroachievements_phase2a_launch.md
+└── rct1_retroachievements_phase2b_state_discovery.md
+```
+
+The local `runtime-test/` directory is intentionally excluded from Git. It
+contains Proton/Wine prefixes, installed game files, logs, and other machine-
+specific runtime state.
+
+## Reproducing the reader locally
+
+From `phase2/state_reader/`:
+
+```sh
+cc -O2 -Wall -Wextra -o rct1_state_reader rct1_state_reader.c
+./rct1_state_reader
+```
+
+The tools are diagnostic and read-only. They locate the running `RCT.EXE`
+process and inspect mapped memory, but do not write process memory, patch the
+game, inject a DLL, or send achievement/network requests.
+
+The exact launch environment and successful Forest Frontiers procedure are
+documented in
+[`rct1_retroachievements_phase2a_launch.md`](reports/rct1_retroachievements_phase2a_launch.md).
+
+## Research principles
+
+- Prefer reproducible observations over assumptions from static strings or
+  one-off memory hits.
+- Validate candidate locators across fresh launches, scenario transitions,
+  saves, and controlled gameplay changes.
+- Keep the canonical game installation untouched; use an isolated runtime for
+  experiments.
+- Identify the supported executable by hash and reject unknown builds by
+  default.
+- Keep copyrighted game files, saves, and compatibility prefixes out of this
+  repository.
+
+## Scope and limitations
+
+This repository contains research notes and original diagnostic source code. It
+does not redistribute `RCT.EXE`, game data, scenarios, save files, DLLs, or
+other copyrighted game assets. A legitimate local copy and a compatible runtime
+may be required to reproduce the experiments.
+
+RetroAchievements integration, achievement definitions, authentication, and
+unlock writes are out of scope until the underlying runtime state is understood
+and validated.
+
+## Roadmap
+
+1. Validate the cash candidate across controlled changes and fresh launches.
+2. Locate and validate guest count and park rating.
+3. Identify scenario and success/failure state transitions.
+4. Model ride objects well enough to evaluate coaster excitement.
+5. Build a small external state evaluator with executable and scenario
+   identity checks.
+6. Reassess RetroAchievements integration only after the evaluator is stable.
+
+## Reports
+
+Start with the [feasibility report](reports/rct1_retroachievements_feasibility.md)
+for the target-build analysis, then read the [launch report](reports/rct1_retroachievements_phase2a_launch.md)
+and [state-discovery report](reports/rct1_retroachievements_phase2b_state_discovery.md)
+for the current runtime evidence.
