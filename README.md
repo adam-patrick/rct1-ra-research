@@ -65,7 +65,8 @@ reports/
 ├── rct1_retroachievements_phase2a_launch.md
 ├── rct1_retroachievements_phase2b_state_discovery.md
 ├── rct1_retroachievements_phase2c_guest_count.md
-└── rct1_retroachievements_phase2d_park_rating.md
+├── rct1_retroachievements_phase2d_park_rating.md
+└── rct1_retroachievements_phase2e_cash_discovery.md
 ```
 
 The local `runtime-test/` directory is intentionally excluded from Git. It
