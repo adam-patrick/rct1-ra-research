@@ -24,13 +24,36 @@ Start RCT first. The scanner locates `RCT.EXE`, reports PID/module base, and inc
 
 The scanner supports signed and unsigned 8-, 16-, and 32-bit interpretations, and records the interpretation for every candidate. Saved absolute addresses are tied to the saved PID/session; after a restart, load only as a starting point and expect invalid addresses.
 
+### Controlled transition protocol
+
+For a value that changes during simulation, use this human-in-the-loop order:
+
+1. Record the displayed value and pause the game through the normal UI.
+2. Scan the paused snapshot and record the PID, module base, raw scale/type,
+   and candidate count.
+3. Unpause normally and perform one controlled action or wait for one known
+   transition.
+4. Pause again before filtering or rescanning. Do not validate candidates from
+   a scan taken while the simulation is running.
+5. Use `Changed`, `Increased`, `Decreased`, or a known-delta filter, then repeat
+   an unchanged paused check.
+6. Restart the game and repeat the read in a fresh process before promoting a
+   locator.
+
+This pause/scan/unpause/re-pause coordination is intentional: broad scans can
+take long enough for the game to change state while the scan is in progress.
+
 ### Guest-count example
 
 Start with the visible count, select `u16` or all types, scan the integer, let guests enter normally, then filter with `Changed`, `Increased`, or `Increased by amount`. Repeat until only a few candidates remain.
 
 ### Cash example
 
-For displayed cash such as `$9,516.10`, try raw values such as `951610`, `95161`, or `9516` in separate scans. The tool deliberately does not silently assume a decimal scaling. After a normal purchase, use `Decreased` or `Decreased by amount` with the raw representation you are testing.
+For displayed cash such as `$9,516.00`, the validated field currently reads
+`95160` (displayed dollars x10). The tool deliberately does not silently
+assume a decimal scaling, so use heuristic scales or test representations
+explicitly. After a normal cash decrease, pause again and use `Decreased` or
+`Decreased by amount` with the raw representation under test.
 
 ## Limitations
 

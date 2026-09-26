@@ -133,3 +133,6 @@ and [state-discovery report](reports/rct1_retroachievements_phase2b_state_discov
 for the current runtime evidence. The validated guest-count and park-rating
 findings are documented in the [Phase 2C report](reports/rct1_retroachievements_phase2c_guest_count.md)
 and [Phase 2D report](reports/rct1_retroachievements_phase2d_park_rating.md).
+The cash exact-scan negative result and changed-value validation are documented
+in the [Phase 2E report](reports/rct1_retroachievements_phase2e_cash_discovery.md)
+and [Phase 2F report](reports/rct1_retroachievements_phase2f_cash_validation.md).
