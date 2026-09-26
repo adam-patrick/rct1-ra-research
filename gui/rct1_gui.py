@@ -22,6 +22,8 @@ METADATA_PATH = ROOT / "gui" / "research_metadata.json"
 
 TYPES = {"s8": (1, True), "u8": (1, False), "s16": (2, True),
          "u16": (2, False), "s32": (4, True), "u32": (4, False)}
+MAX_CANDIDATES = 50_000
+MAX_BASELINE_BYTES = 256 * 1024 * 1024
 
 @dataclass
 class ProcessInfo:
@@ -134,9 +136,13 @@ class SearchEngine:
         self.baseline: list[tuple[int, bytes]] = []
         self.baseline_types: list[str] = []
         self.cancel = threading.Event()
+        self.truncated = False
+        self.scan_message = ""
 
     def scan(self, mode: str, value: int | None = None, type_names: list[str] | None = None, delta: int = 0):
         types = type_names or list(TYPES)
+        self.truncated = False
+        self.scan_message = ""
         if mode == "unknown":
             # Keep the paused snapshot as bytes. Materialising one Python
             # Candidate per address can mean millions of objects and makes an
@@ -145,13 +151,20 @@ class SearchEngine:
             self.candidates = []
             self.baseline = []
             self.baseline_types = types
+            captured = 0
             for lo, hi in self.provider.mappings():
                 for address in range(lo, hi, 1024 * 1024):
                     if self.cancel.is_set(): return
+                    if captured >= MAX_BASELINE_BYTES:
+                        self.truncated = True
+                        self.scan_message = f"Baseline limited to {MAX_BASELINE_BYTES // (1024 * 1024)} MiB"
+                        return
                     end = min(address + 1024 * 1024, hi)
+                    end = min(end, address + MAX_BASELINE_BYTES - captured)
                     try: data = self.provider.read(address, end - address)
                     except OSError: continue
                     self.baseline.append((address, data))
+                    captured += len(data)
                     self.progress(address - lo, hi - lo)
             return
         if mode == "exact":
@@ -170,8 +183,20 @@ class SearchEngine:
                             if mode == "unknown" or current == value:
                                 self.candidates.append(Candidate(address + off, address + off - self.provider.info.base, name, current, current))
                     self.progress(address - lo, hi - lo)
+        elif self.baseline and mode == "unchanged":
+            # Most memory remains unchanged. Keep the newer snapshot in place
+            # and defer candidate creation until a selective filter is used.
+            for index, (lo, previous_bytes) in enumerate(self.baseline):
+                if self.cancel.is_set(): return
+                try: current_bytes = self.provider.read(lo, len(previous_bytes))
+                except OSError: continue
+                self.baseline[index] = (lo, current_bytes)
+                self.progress(lo, lo + len(current_bytes))
+            self.candidates = []
+            self.scan_message = "Unchanged snapshot retained; candidates deferred"
         elif self.baseline:
             kept = []
+            stop = False
             for lo, previous_bytes in self.baseline:
                 if self.cancel.is_set(): return
                 try: current_bytes = self.provider.read(lo, len(previous_bytes))
@@ -187,7 +212,14 @@ class SearchEngine:
                               "decreased_by": d == -delta}.get(mode, False)
                         if ok:
                             kept.append(Candidate(lo + off, lo + off - self.provider.info.base, name, current, previous))
+                            if len(kept) >= MAX_CANDIDATES:
+                                self.truncated = True
+                                self.scan_message = f"Results limited to {MAX_CANDIDATES:,} candidates"
+                                stop = True
+                                break
+                    if stop: break
                 self.progress(lo, lo + len(previous_bytes))
+                if stop: break
             self.baseline = []
             self.candidates = kept
         else:

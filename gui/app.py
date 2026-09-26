@@ -5,10 +5,16 @@ from tkinter import filedialog, messagebox, ttk
 from datetime import datetime, timezone
 from .rct1_gui import *
 
+MAX_DISPLAY_ROWS = 5_000
+CONTINUOUS_MODES = {"changed", "unchanged", "increased", "decreased", "increased_by", "decreased_by"}
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__(); self.title("RCT1 Read-Only Memory Research"); self.geometry("1180x760")
         self.info = None; self.provider = None; self.engine = None; self.watches = []
+        self.scanning = False
+        self.continuous = tk.BooleanVar(value=False)
+        self.continuous_job = None
         self._build(); self.after(1000, self.refresh_status)
     def _build(self):
         status = ttk.LabelFrame(self, text="Process / Game Status"); status.pack(fill="x", padx=8, pady=8)
@@ -22,8 +28,9 @@ class App(tk.Tk):
         self.mode = ttk.Combobox(controls, values=["exact", "unknown", "changed", "unchanged", "increased", "decreased", "increased_by", "decreased_by"], state="readonly", width=16); self.mode.set("exact"); self.mode.pack(side="left", padx=4, pady=5)
         self.value = ttk.Entry(controls, width=14); self.value.insert(0, "0"); self.value.pack(side="left", padx=4)
         self.typevar = tk.StringVar(value="u16"); ttk.Combobox(controls, textvariable=self.typevar, values=list(TYPES), state="readonly", width=7).pack(side="left", padx=4)
-        ttk.Button(controls, text="Run scan/filter", command=self.run_scan).pack(side="left", padx=4)
+        self.scan_button = ttk.Button(controls, text="Run scan/filter", command=self.run_scan); self.scan_button.pack(side="left", padx=4)
         ttk.Button(controls, text="Cancel", command=self.cancel_scan).pack(side="left", padx=4)
+        ttk.Checkbutton(controls, text="Continuous filter (1s)", variable=self.continuous).pack(side="left", padx=4)
         self.progress = ttk.Progressbar(controls, mode="determinate"); self.progress.pack(side="left", fill="x", expand=True, padx=8)
         self.count = tk.StringVar(value="Candidates: 0"); ttk.Label(controls, textvariable=self.count).pack(side="right", padx=5)
         frame = ttk.Frame(self); frame.pack(fill="both", expand=True, padx=8, pady=4)
@@ -51,21 +58,48 @@ class App(tk.Tk):
         else: self.state_text.set("Unsupported/unknown build; validated fields hidden")
         self.after(1500, self.refresh_status)
     def run_scan(self):
+        if self.scanning: return
         if not self.provider or self.info.build_status != "Supported": return messagebox.showwarning("Unavailable", "Connect to the supported RCT.EXE build first.")
+        mode = self.mode.get()
+        if self.continuous.get() and mode not in CONTINUOUS_MODES:
+            self.continuous.set(False)
+            return messagebox.showwarning("Continuous filter", "Continuous mode is available for refinement filters only.")
         if self.engine is None or self.engine.provider.info.pid != self.info.pid: self.engine = SearchEngine(self.provider, lambda done,total: self.after(0, lambda: self.progress.configure(value=(done / total * 100) if total else 0)))
-        mode = self.mode.get(); value = int(self.value.get(), 0) if mode not in ("unknown",) else None
-        self.progress.configure(value=0); self.engine.cancel.clear(); threading.Thread(target=self._scan_thread, args=(mode, value), daemon=True).start()
+        value = int(self.value.get(), 0) if mode not in ("unknown",) else None
+        self.progress.configure(value=0); self.engine.cancel.clear(); self.scanning = True; self.scan_button.configure(state="disabled")
+        threading.Thread(target=self._scan_thread, args=(mode, value), daemon=True).start()
     def _scan_thread(self, mode, value):
-        self.engine.scan(mode, value, [self.typevar.get()], value or 0 if mode.endswith("_by") else 0); self.after(0, self.populate)
+        try:
+            self.engine.scan(mode, value, [self.typevar.get()], value or 0 if mode.endswith("_by") else 0)
+            self.after(0, lambda: self.populate(mode))
+        except Exception as error:
+            self.after(0, lambda: self.scan_failed(error))
     def cancel_scan(self):
+        self.continuous.set(False)
+        if self.continuous_job is not None:
+            self.after_cancel(self.continuous_job); self.continuous_job = None
         if self.engine: self.engine.cancel.set()
-    def populate(self):
+    def scan_failed(self, error):
+        self.scanning = False; self.continuous.set(False); self.scan_button.configure(state="normal")
+        messagebox.showerror("Scan failed", f"{type(error).__name__}: {error}")
+    def populate(self, completed_mode=None):
+        self.scanning = False; self.scan_button.configure(state="normal")
         self.table.delete(*self.table.get_children())
         if self.engine and self.engine.baseline:
-            self.count.set("Unknown baseline captured; perform a transition, then filter")
+            self.count.set(self.engine.scan_message or "Unknown baseline captured; perform a transition, then filter")
         else:
-            self.count.set(f"Candidates: {len(self.engine.candidates) if self.engine else 0}")
-        for index, c in enumerate(self.engine.candidates if self.engine else []): self.table.insert("", "end", iid=str(index), values=(f"0x{c.address:08x}", f"+0x{c.relative:x}", c.type_name, c.current, c.previous, c.delta, c.label, c.status))
+            count = len(self.engine.candidates) if self.engine else 0
+            message = f" ({self.engine.scan_message})" if self.engine and self.engine.scan_message else ""
+            self.count.set(f"Candidates: {count:,}{message}")
+        candidates = self.engine.candidates if self.engine else []
+        for index, c in enumerate(candidates[:MAX_DISPLAY_ROWS]):
+            self.table.insert("", "end", iid=str(index), values=(f"0x{c.address:08x}", f"+0x{c.relative:x}", c.type_name, c.current, c.previous, c.delta, c.label, c.status))
+        if len(candidates) > MAX_DISPLAY_ROWS:
+            self.count.set(f"Candidates: {len(candidates):,} (showing first {MAX_DISPLAY_ROWS:,}; narrow the scan before inspecting)")
+        if (self.continuous.get() and completed_mode in CONTINUOUS_MODES and
+                self.engine and not self.engine.cancel.is_set() and self.info and
+                self.engine.provider.info.pid == self.info.pid):
+            self.continuous_job = self.after(1000, self.run_scan)
     def selected(self):
         return [self.engine.candidates[int(x)] for x in self.table.selection()]
     def inspect(self, _event=None):

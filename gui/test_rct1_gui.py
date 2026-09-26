@@ -36,4 +36,14 @@ class GuiLogicTests(unittest.TestCase):
         engine = SearchEngine(Provider()); engine.scan("unknown", type_names=["u16"])
         self.assertEqual(engine.candidates, []); self.assertTrue(engine.baseline)
 
+    def test_unchanged_refines_snapshot_without_materializing_candidates(self):
+        class Provider:
+            info = type("Info", (), {"pid": 7, "base": 0x400000, "build_hash": SUPPORTED_BUILD})()
+            def mappings(self): return [(0x400000, 0x400004)]
+            def read(self, address, size): return bytes([1, 0, 2, 0])[:size]
+        engine = SearchEngine(Provider()); engine.scan("unknown", type_names=["u16"])
+        engine.scan("unchanged", type_names=["u16"])
+        self.assertEqual(engine.candidates, [])
+        self.assertIn("deferred", engine.scan_message)
+
 if __name__ == "__main__": unittest.main()
