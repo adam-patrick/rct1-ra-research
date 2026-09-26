@@ -21,7 +21,7 @@ int main(int ac,char**av){
   /* The 32-bit RCT image and its private continuation occupy this stable
      low-address window under this Proton build. Avoid Wine/UI allocations. */
   int game=strstr(line,"/RCT.EXE")!=NULL; if(!game && (a < 0x00400000UL || a >= 0x00c50000UL))continue;
-  size_t len=(size_t)(z-a), got;uint8_t*buf=malloc(len);if(!buf)continue;struct iovec l={buf,len},r={(void*)a,len};got=process_vm_readv(pid,&l,1,&r,1,0);if(got==len){for(int widx=0;widx<2;widx++){int w=widx?4:2;for(size_t i=0;i+w<=got;i+=2)for(int j=0;j<nv;j++)if(vals[j]!=0&&match(buf,i,vals[j],w))printf("%s width=%d value=%u addr=0x%08lx offset=0x%lx\n",game?"game":"anon",w,vals[j],a+i,(unsigned long)(a+i-0x00400000));}}
+  size_t len=(size_t)(z-a), got;uint8_t*buf=malloc(len);if(!buf)continue;struct iovec l={buf,len},r={(void*)a,len};got=process_vm_readv(pid,&l,1,&r,1,0);if(got==len){const int widths[]={1,2,4};for(size_t widx=0;widx<sizeof(widths)/sizeof(widths[0]);widx++){int w=widths[widx];for(size_t i=0;i+w<=got;i++)for(int j=0;j<nv;j++)if(vals[j]!=0&&match(buf,i,vals[j],w))printf("%s width=%d value=%u addr=0x%08lx offset=0x%lx\n",game?"game":"anon",w,vals[j],a+i,(unsigned long)(a+i-0x00400000));}}
   free(buf);
  }
  fclose(f);return 0;
