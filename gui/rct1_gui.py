@@ -131,12 +131,32 @@ class SearchEngine:
     def __init__(self, provider: MemoryProvider, progress: Callable[[int, int], None] | None = None):
         self.provider, self.progress = provider, progress or (lambda *_: None)
         self.candidates: list[Candidate] = []
+        self.baseline: list[tuple[int, bytes]] = []
+        self.baseline_types: list[str] = []
         self.cancel = threading.Event()
 
     def scan(self, mode: str, value: int | None = None, type_names: list[str] | None = None, delta: int = 0):
         types = type_names or list(TYPES)
-        if mode in ("exact", "unknown"):
+        if mode == "unknown":
+            # Keep the paused snapshot as bytes. Materialising one Python
+            # Candidate per address can mean millions of objects and makes an
+            # unknown baseline look like a hung GUI. Candidates are generated
+            # only after the next comparison, when the search has narrowed.
             self.candidates = []
+            self.baseline = []
+            self.baseline_types = types
+            for lo, hi in self.provider.mappings():
+                for address in range(lo, hi, 1024 * 1024):
+                    if self.cancel.is_set(): return
+                    end = min(address + 1024 * 1024, hi)
+                    try: data = self.provider.read(address, end - address)
+                    except OSError: continue
+                    self.baseline.append((address, data))
+                    self.progress(address - lo, hi - lo)
+            return
+        if mode == "exact":
+            self.candidates = []
+            self.baseline = []
             for lo, hi in self.provider.mappings():
                 for address in range(lo, hi, 1024 * 1024):
                     if self.cancel.is_set(): return
@@ -150,6 +170,26 @@ class SearchEngine:
                             if mode == "unknown" or current == value:
                                 self.candidates.append(Candidate(address + off, address + off - self.provider.info.base, name, current, current))
                     self.progress(address - lo, hi - lo)
+        elif self.baseline:
+            kept = []
+            for lo, previous_bytes in self.baseline:
+                if self.cancel.is_set(): return
+                try: current_bytes = self.provider.read(lo, len(previous_bytes))
+                except OSError: continue
+                for name in self.baseline_types:
+                    width = TYPES[name][0]
+                    for off in range(0, len(previous_bytes) - width + 1, width):
+                        previous = interpret(previous_bytes[off:off + width], name)
+                        current = interpret(current_bytes[off:off + width], name)
+                        d = current - previous
+                        ok = {"changed": d != 0, "unchanged": d == 0, "increased": d > 0,
+                              "decreased": d < 0, "increased_by": d == delta,
+                              "decreased_by": d == -delta}.get(mode, False)
+                        if ok:
+                            kept.append(Candidate(lo + off, lo + off - self.provider.info.base, name, current, previous))
+                self.progress(lo, lo + len(previous_bytes))
+            self.baseline = []
+            self.candidates = kept
         else:
             kept = []
             for candidate in self.candidates:

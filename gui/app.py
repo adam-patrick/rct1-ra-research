@@ -60,7 +60,11 @@ class App(tk.Tk):
     def cancel_scan(self):
         if self.engine: self.engine.cancel.set()
     def populate(self):
-        self.table.delete(*self.table.get_children()); self.count.set(f"Candidates: {len(self.engine.candidates) if self.engine else 0}")
+        self.table.delete(*self.table.get_children())
+        if self.engine and self.engine.baseline:
+            self.count.set("Unknown baseline captured; perform a transition, then filter")
+        else:
+            self.count.set(f"Candidates: {len(self.engine.candidates) if self.engine else 0}")
         for index, c in enumerate(self.engine.candidates if self.engine else []): self.table.insert("", "end", iid=str(index), values=(f"0x{c.address:08x}", f"+0x{c.relative:x}", c.type_name, c.current, c.previous, c.delta, c.label, c.status))
     def selected(self):
         return [self.engine.candidates[int(x)] for x in self.table.selection()]

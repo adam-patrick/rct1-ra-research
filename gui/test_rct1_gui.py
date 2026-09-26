@@ -28,4 +28,12 @@ class GuiLogicTests(unittest.TestCase):
             payload = json.loads(path.read_text()); payload["build_hash"] = "other"; path.write_text(json.dumps(payload))
             with self.assertRaises(ValueError): restored.load_session(path)
 
+    def test_unknown_baseline_is_deferred(self):
+        class Provider:
+            info = type("Info", (), {"pid": 7, "base": 0x400000, "build_hash": SUPPORTED_BUILD})()
+            def mappings(self): return [(0x400000, 0x400004)]
+            def read(self, address, size): return bytes([1, 0, 2, 0])[:size]
+        engine = SearchEngine(Provider()); engine.scan("unknown", type_names=["u16"])
+        self.assertEqual(engine.candidates, []); self.assertTrue(engine.baseline)
+
 if __name__ == "__main__": unittest.main()
