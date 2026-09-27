@@ -1,4 +1,5 @@
 #include "rc_client.h"
+#include "local_evaluator.h"
 #include "rct_memory_provider.h"
 
 #include <inttypes.h>
@@ -46,19 +47,22 @@ int main(int argc, char** argv) {
   rct_memory_provider_t provider;
   rct_state_snapshot_t snapshot;
   int rct_state_mode = 0;
+  int local_eval_mode = 0;
   int frames = 3;
   int i;
 
   if (argc > 1) {
     if (strcmp(argv[1], "--rct-state") == 0) {
       rct_state_mode = 1;
+    } else if (strcmp(argv[1], "--local-eval") == 0) {
+      local_eval_mode = 1;
     } else if (strcmp(argv[1], "--lifecycle") != 0 || argc > 2) {
-      fprintf(stderr, "usage: %s [--lifecycle|--rct-state]\n", argv[0]);
+      fprintf(stderr, "usage: %s [--lifecycle|--rct-state|--local-eval]\n", argv[0]);
       return 2;
     }
   }
 
-  if (rct_state_mode) {
+  if (rct_state_mode || local_eval_mode) {
     if (!rct_memory_provider_open(&provider)) {
       fprintf(stderr, "spike: RCT.EXE not found or module mapping unavailable\n");
       return 3;
@@ -73,6 +77,15 @@ int main(int argc, char** argv) {
     if (snapshot.guests_valid) printf("guests=%" PRIu16 "\n", snapshot.guests);
     if (snapshot.park_rating_valid) printf("park_rating=%" PRIu16 "\n", snapshot.park_rating);
     if (snapshot.cash_valid) printf("cash_raw=%" PRIu32 "\n", snapshot.cash_raw);
+    puts("snapshot_coherent=1");
+    if (local_eval_mode) {
+      if (!local_evaluator_run(&snapshot)) {
+        fprintf(stderr, "spike: local evaluator setup failed\n");
+        return 6;
+      }
+      puts("local_evaluation=complete network=disabled unlock_submission=disabled");
+      return 0;
+    }
     client = rc_client_create(spike_read_memory, spike_server_call);
     if (client == NULL) {
       fprintf(stderr, "spike: rc_client_create failed for RCT provider\n");

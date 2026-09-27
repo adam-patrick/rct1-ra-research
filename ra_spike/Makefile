@@ -17,8 +17,8 @@ RACHEEVOS_SOURCES := \
 
 all: rc_client_spike
 
-rc_client_spike: rc_client_spike.c rct_memory_provider.c rct_memory_provider.h $(RACHEEVOS_SOURCES)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ rc_client_spike.c rct_memory_provider.c $(RACHEEVOS_SOURCES) -lm
+rc_client_spike: rc_client_spike.c local_evaluator.c local_evaluator.h rct_memory_provider.c rct_memory_provider.h $(RACHEEVOS_SOURCES)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ rc_client_spike.c local_evaluator.c rct_memory_provider.c $(RACHEEVOS_SOURCES) -lm
 
 test: rc_client_spike
 	@output=$$(./rc_client_spike --lifecycle); \

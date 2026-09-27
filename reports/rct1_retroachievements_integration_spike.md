@@ -37,6 +37,23 @@ corrected bridge found PID `68694`, derived base `0x400000`, read all three
 fields, and initialized `rc_client` with the provider while networking remained
 disabled.
 
+## OBSERVATION — coherent state snapshot validated
+
+The provider now reads Guests, Park Rating, and Cash with one multi-iovec
+`process_vm_readv` operation. It reports the snapshot as valid only when the
+complete byte total is returned; otherwise it rejects the snapshot rather than
+combining fields sampled at different times. A live test produced
+`snapshot_coherent=1` with Guests `4`, Park Rating `500`, and Cash raw `97295`.
+
+## OBSERVATION — local evaluator proof completed
+
+`--local-eval` feeds the coherent snapshot into a direct local rcheevos runtime
+with synthetic experiment-only addresses. A test condition requiring Guests and
+Park Rating to be nonzero produced a local achievement-trigger event. The
+runtime is explicitly initialized as an active loaded-game experiment; this is
+not a claim that official game loading has been solved. No `rc_client` game
+load, network request, account session, or unlock submission occurs.
+
 The bridge currently uses these repository-validated offsets for the supported
 build:
 

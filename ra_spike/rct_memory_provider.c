@@ -95,13 +95,36 @@ uint32_t rct_memory_provider_read(const rct_memory_provider_t* provider,
 
 int rct_memory_provider_read_state(const rct_memory_provider_t* provider,
                                    rct_state_snapshot_t* snapshot) {
+  struct iovec local[3];
+  struct iovec remote[3];
+  ssize_t bytes_read;
+  size_t total_size;
+
   if (snapshot == NULL) return 0;
   memset(snapshot, 0, sizeof(*snapshot));
-  snapshot->guests_valid = rct_memory_provider_read(provider, GUESTS_OFFSET,
-      (uint8_t*)&snapshot->guests, sizeof(snapshot->guests)) == sizeof(snapshot->guests);
-  snapshot->park_rating_valid = rct_memory_provider_read(provider, PARK_RATING_OFFSET,
-      (uint8_t*)&snapshot->park_rating, sizeof(snapshot->park_rating)) == sizeof(snapshot->park_rating);
-  snapshot->cash_valid = rct_memory_provider_read(provider, CASH_OFFSET,
-      (uint8_t*)&snapshot->cash_raw, sizeof(snapshot->cash_raw)) == sizeof(snapshot->cash_raw);
-  return snapshot->guests_valid || snapshot->park_rating_valid || snapshot->cash_valid;
+  if (provider == NULL || provider->pid <= 0 || provider->module_base == 0) return 0;
+
+  local[0].iov_base = &snapshot->guests;
+  local[0].iov_len = sizeof(snapshot->guests);
+  local[1].iov_base = &snapshot->park_rating;
+  local[1].iov_len = sizeof(snapshot->park_rating);
+  local[2].iov_base = &snapshot->cash_raw;
+  local[2].iov_len = sizeof(snapshot->cash_raw);
+
+  remote[0].iov_base = (void*)(provider->module_base + GUESTS_OFFSET);
+  remote[0].iov_len = sizeof(snapshot->guests);
+  remote[1].iov_base = (void*)(provider->module_base + PARK_RATING_OFFSET);
+  remote[1].iov_len = sizeof(snapshot->park_rating);
+  remote[2].iov_base = (void*)(provider->module_base + CASH_OFFSET);
+  remote[2].iov_len = sizeof(snapshot->cash_raw);
+
+  total_size = sizeof(snapshot->guests) + sizeof(snapshot->park_rating) +
+               sizeof(snapshot->cash_raw);
+  bytes_read = process_vm_readv(provider->pid, local, 3, remote, 3, 0);
+  if (bytes_read != (ssize_t)total_size) return 0;
+
+  snapshot->guests_valid = 1;
+  snapshot->park_rating_valid = 1;
+  snapshot->cash_valid = 1;
+  return 1;
 }

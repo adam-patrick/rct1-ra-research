@@ -18,6 +18,16 @@ running. The provider is read-only and the offsets are explicitly a temporary
 module-relative bridge; they are not an official RetroAchievements address
 map.
 
+The three state fields are captured with one `process_vm_readv` call using
+multiple local and remote iovec entries. If the complete snapshot cannot be
+read, the provider rejects the snapshot instead of mixing values from separate
+sampling moments.
+
+`--local-eval` runs a test-only rcheevos runtime condition against the live
+coherent snapshot. It is local evaluation only: the test trigger is explicitly
+started in an active state, and no `rc_client` game load, network request,
+account session, or unlock submission occurs.
+
 The default spike has:
 
 - no RCT process requirement;
@@ -34,6 +44,7 @@ make test
 ./rc_client_spike --lifecycle
 # while the supported RCT.EXE build is running:
 ./rc_client_spike --rct-state
+./rc_client_spike --local-eval
 ```
 
 The dependency is a git submodule so the exact rcheevos revision is recorded
