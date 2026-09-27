@@ -121,13 +121,17 @@ approval, Hardcore policy, and complete RCT state coverage are unresolved.
 
 ## Roadmap
 
-1. Review the technical feasibility/proposal package and unresolved RA questions.
-2. If guidance supports continuing, identify scenario and success/failure state
+1. Build a read-only typed-memory viewer for selected candidates/bookmarks,
+   showing raw bytes plus signed/unsigned little-endian 8-, 16-, and 32-bit
+   interpretations. It should support live refresh while RCT runs or an
+   explicit refresh action.
+2. Review the technical feasibility/proposal package and unresolved RA questions.
+3. If guidance supports continuing, identify scenario and success/failure state
    transitions with the existing read-only tools.
-3. Model ride objects well enough to evaluate coaster excitement.
-4. Extend the versioned external state evaluator with executable, scenario, and
+4. Model ride objects well enough to evaluate coaster excitement.
+5. Extend the versioned external state evaluator with executable, scenario, and
    save identity checks.
-5. Keep production RA communication disabled until identity and policy guidance
+6. Keep production RA communication disabled until identity and policy guidance
    is received.
 
 ## Reports
