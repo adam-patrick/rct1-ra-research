@@ -73,19 +73,6 @@
           "date_last_validated": null
         },
         {
-          "id": "candidate_80d468",
-          "label": "Loan Amount",
-          "module": "RCT.EXE",
-          "offset": "0x80d468",
-          "type": "u32",
-          "status": "observed",
-          "confidence": "medium",
-          "build_hash": "bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76",
-          "notes": "value matches on screen amount",
-          "date_discovered": "2026-09-27",
-          "date_last_validated": null
-        },
-        {
           "id": "candidate_69d900",
           "label": "Company Value",
           "module": "RCT.EXE",
@@ -121,6 +108,19 @@
           "confidence": "medium",
           "build_hash": "bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76",
           "notes": "1 = Open, 0 = Closed",
+          "date_discovered": "2026-09-27",
+          "date_last_validated": null
+        },
+        {
+          "id": "candidate_80d468",
+          "label": "Loan Amount (unreliable)",
+          "module": "RCT.EXE",
+          "offset": "0x80d468",
+          "type": "u32",
+          "status": "observed",
+          "confidence": "low",
+          "build_hash": "bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76",
+          "notes": "value matches on screen amount",
           "date_discovered": "2026-09-27",
           "date_last_validated": null
         }
