@@ -11,7 +11,7 @@ CONTINUOUS_MODES = {"changed", "unchanged", "increased", "decreased", "increased
 class App(tk.Tk):
     def __init__(self):
         super().__init__(); self.title("RCT1 Read-Only Memory Research"); self.geometry("1180x760")
-        self.info = None; self.provider = None; self.engine = None; self.watches = []
+        self.info = None; self.provider = None; self.engine = None; self.watches = []; self.watch_keys = set()
         self.scanning = False
         self.continuous = tk.BooleanVar(value=False)
         self.continuous_job = None
@@ -44,6 +44,7 @@ class App(tk.Tk):
             self.table.heading(col, text=col.replace("_", " ").title(), command=lambda column=col: self.sort_candidates(column))
             self.table.column(col, width=120)
         self.table.pack(side="left", fill="both", expand=True); self.table.bind("<<TreeviewSelect>>", self.inspect)
+        self.table.tag_configure("watched", background="#fff1a8")
         scroll = ttk.Scrollbar(frame, command=self.table.yview); scroll.pack(side="right", fill="y"); self.table.configure(yscrollcommand=scroll.set)
         bottom = ttk.Frame(self); bottom.pack(fill="x", padx=8, pady=5)
         ttk.Button(bottom, text="Add bookmark", command=self.bookmark).pack(side="left", padx=3)
@@ -107,7 +108,8 @@ class App(tk.Tk):
             indexed.sort(key=lambda item: self.sort_key(item[1], self.sort_column), reverse=self.sort_reverse)
         for index, c in indexed[:MAX_DISPLAY_ROWS]:
             history = ",".join(str(value) for value in c.history[-8:])
-            self.table.insert("", "end", iid=str(index), values=(f"0x{c.address:08x}", f"+0x{c.relative:x}", c.type_name, c.current, c.previous, c.delta, history, c.label, c.status))
+            tags = ("watched",) if (c.relative, c.type_name) in self.watch_keys else ()
+            self.table.insert("", "end", iid=str(index), values=(f"0x{c.address:08x}", f"+0x{c.relative:x}", c.type_name, c.current, c.previous, c.delta, history, c.label, c.status), tags=tags)
         if len(candidates) > MAX_DISPLAY_ROWS:
             self.count.set(f"Candidates: {len(candidates):,} (showing first {MAX_DISPLAY_ROWS:,}; narrow the scan before inspecting)")
         if (self.continuous.get() and completed_mode in CONTINUOUS_MODES and
@@ -159,33 +161,45 @@ class App(tk.Tk):
                   "status": existing.get("status", "candidate"), "confidence": existing.get("confidence", "low"),
                   "notes": existing.get("notes", "")}
         variables = {name: tk.StringVar(value=value) for name, value in fields.items()}
-        ttk.Label(dialog, text=f"Locator: RCT.EXE + 0x{candidate.relative:x} ({candidate.type_name})").grid(row=0, column=0, columnspan=2, padx=10, pady=8, sticky="w")
-        ttk.Label(dialog, text="Label").grid(row=1, column=0, padx=10, pady=4, sticky="w")
-        ttk.Entry(dialog, textvariable=variables["label"], width=42).grid(row=1, column=1, padx=10, pady=4)
-        ttk.Label(dialog, text="Status").grid(row=2, column=0, padx=10, pady=4, sticky="w")
-        ttk.Combobox(dialog, textvariable=variables["status"], values=["candidate", "observed", "validated", "failed", "deprecated"], state="readonly", width=39).grid(row=2, column=1, padx=10, pady=4)
-        ttk.Label(dialog, text="Confidence").grid(row=3, column=0, padx=10, pady=4, sticky="w")
-        ttk.Combobox(dialog, textvariable=variables["confidence"], values=["low", "medium", "high"], state="readonly", width=39).grid(row=3, column=1, padx=10, pady=4)
-        ttk.Label(dialog, text="Notes").grid(row=4, column=0, padx=10, pady=4, sticky="nw")
-        ttk.Entry(dialog, textvariable=variables["notes"], width=42).grid(row=4, column=1, padx=10, pady=4)
+        metadata = [("Address", f"0x{candidate.address:08x}"), ("Module Relative", f"+0x{candidate.relative:x}"), ("Type", candidate.type_name), ("Build", self.info.build_hash or "unavailable")]
+        for row, (name, value) in enumerate(metadata):
+            ttk.Label(dialog, text=name).grid(row=row, column=0, padx=10, pady=3, sticky="w")
+            ttk.Label(dialog, text=value).grid(row=row, column=1, padx=10, pady=3, sticky="w")
+        ttk.Label(dialog, text="Label").grid(row=4, column=0, padx=10, pady=4, sticky="w")
+        ttk.Entry(dialog, textvariable=variables["label"], width=42).grid(row=4, column=1, padx=10, pady=4)
+        ttk.Label(dialog, text="Status").grid(row=5, column=0, padx=10, pady=4, sticky="w")
+        ttk.Combobox(dialog, textvariable=variables["status"], values=["candidate", "observed", "validated", "failed", "deprecated"], state="readonly", width=39).grid(row=5, column=1, padx=10, pady=4)
+        ttk.Label(dialog, text="Confidence").grid(row=6, column=0, padx=10, pady=4, sticky="w")
+        ttk.Combobox(dialog, textvariable=variables["confidence"], values=["low", "medium", "high"], state="readonly", width=39).grid(row=6, column=1, padx=10, pady=4)
+        ttk.Label(dialog, text="Notes").grid(row=7, column=0, padx=10, pady=4, sticky="nw")
+        ttk.Entry(dialog, textvariable=variables["notes"], width=42).grid(row=7, column=1, padx=10, pady=4)
         result = []
         def save():
             label = variables["label"].get().strip()
             if not label: return messagebox.showwarning("Bookmark", "Label is required.", parent=dialog)
             result.append({name: variables[name].get().strip() for name in variables}); dialog.destroy()
-        buttons = ttk.Frame(dialog); buttons.grid(row=5, column=0, columnspan=2, pady=10)
+        buttons = ttk.Frame(dialog); buttons.grid(row=8, column=0, columnspan=2, pady=10)
         ttk.Button(buttons, text="Save", command=save).pack(side="left", padx=5)
         ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="left", padx=5)
         self.wait_window(dialog)
         return result[0] if result else None
     def watch_selected(self):
         for c in self.selected():
+            self.watch_keys.add((c.relative, c.type_name))
             if c not in self.watches: self.watches.append(c)
+        self.populate()
     def refresh_watches(self):
         if not self.provider: return
-        for c in self.watches:
-            try: c.previous, c.current = c.current, interpret(self.provider.read(c.address, TYPES[c.type_name][0]), c.type_name)
+        refreshed = []
+        for key in self.watch_keys:
+            candidates = [c for c in (self.engine.candidates if self.engine else []) if (c.relative, c.type_name) == key]
+            if not candidates: continue
+            c = candidates[0]
+            try:
+                c.previous, c.current = c.current, interpret(self.provider.read(c.address, TYPES[c.type_name][0]), c.type_name)
+                refreshed.append(c)
             except OSError: pass
+        self.watches = refreshed
         self.populate()
     def save_session(self):
         if not self.engine: return

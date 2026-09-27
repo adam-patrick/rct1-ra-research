@@ -45,6 +45,19 @@
           "notes": "Saved from GUI scan",
           "date_discovered": "2026-09-27",
           "date_last_validated": null
+        },
+        {
+          "id": "candidate_837658",
+          "label": "Possible Simulation Pause Flag",
+          "module": "RCT.EXE",
+          "offset": "0x837658",
+          "type": "u16",
+          "status": "observed",
+          "confidence": "medium",
+          "build_hash": "bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76",
+          "notes": "Observed while manually pausing/unpausing the game. Paused = 1; running = 0. Candidate type: u16.",
+          "date_discovered": "2026-09-27",
+          "date_last_validated": null
         }
       ]
     }
