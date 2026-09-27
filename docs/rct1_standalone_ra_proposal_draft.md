@@ -3,7 +3,7 @@
 # RCT1 Standalone RetroAchievements Integration
 ## Technical Feasibility / Proposal Package
 
-**Repository HEAD reviewed:** `94852ae Harden RCT identity and evaluator fixtures`
+**Repository HEAD reviewed:** `8e3a4f0 Add standalone RA proposal draft`
 
 **Date:** 2026-09-27
 
@@ -50,10 +50,11 @@ coherent multi-field snapshot, deterministic fixtures, and a test-only local
 rcheevos condition that triggers against a live RCT snapshot. The current
 spike has no network implementation and no credentials.
 
-**UNRESOLVED:** official RA identity/hash and platform assignment, standalone
-approval, Hardcore enforcement, save/scenario policy, complete achievement
-state coverage, and the production session/Connect API contract for this
-particular external helper.
+**UNRESOLVED:** the official production architecture (documented Standalones /
+Connect API, `rc_client`/rcheevos, a hybrid, or another approved model), RA
+game/build identity, standalone approval, Hardcore enforcement, save/scenario
+policy, complete achievement state coverage, and the production session
+contract for this particular external helper.
 
 **Recommendation:** the proof of concept is mature enough for an initial,
 non-binding discussion with RA administrators about eligibility, identity, and
@@ -178,43 +179,60 @@ does not authenticate, and does not send an unlock.
 Therefore the correct claim is **local evaluator feasibility demonstrated**, not
 **production RA integration validated**.
 
-## 5. Proposed player architecture
+## 5. Proposed player architecture and unresolved RA model
 
-The following is **PROPOSED**, not implemented:
+The local portion is **PROPOSED and partially demonstrated**:
 
 ```text
 RCT.EXE
   |
-  +--> executable/path/hash validation
+  +--> executable/path/local-build validation
   |
   +--> read-only MemoryProvider
              |
              v
-        coherent RCTState
+        coherent normalized RCTState
              |
-             v
-        RA adapter / address translation
-             |
-             v
-           rc_client
-          /    |     \
-      login  game load  definitions/evaluation
-                         |
-                         v
-                       RA events
+             +-----------------------------+
+             |                             |
+             v                             v
+   future rc_client adapter       future Standalones adapter
+   (if RA approves this path)     (if RA approves Connect API)
+             |                             |
+             v                             v
+   player login + game load       integration account + player link
+   definitions + evaluation       session + local detection/evaluation
+             |                             |
+             +-------------+---------------+
+                           v
+                  approved RA events/unlocks
 ```
 
-Expected process lifecycle:
+The production choice between these branches is **OPEN QUESTION — RA
+clarification required**. The current local `rc_client` lifecycle and direct
+`rc_runtime` condition experiment prove that rcheevos can be embedded and fed
+normalized state; they do not establish that `rc_client` is the required
+standalone production protocol. Conversely, the documented Standalones /
+Connect API describes a separate integration-account, game-page, player-link,
+session, and award model; its documentation does not establish that it is the
+only acceptable architecture for this project.
+
+This choice materially affects authentication, game identity, player linking,
+definition retrieval, evaluation ownership, session lifecycle, unlock
+submission, and host responsibilities. It is not merely a choice of HTTP
+library.
+
+Expected process lifecycle for either approved model:
 
 1. The game starts under the supported runtime.
 2. The helper discovers the process and mapped executable.
 3. The helper verifies the local supported-build identity.
 4. The provider attaches read-only and captures coherent snapshots.
-5. A future approved adapter authenticates a player and loads an approved RA
-   game/session identity.
-6. rcheevos evaluates definitions against the adapter's logical memory/state.
-7. Events are surfaced to the player and, only in an approved production
-   design, transmitted through the accepted RA path.
+5. The approved RA model supplies the official game/session identity and any
+   required player authentication.
+6. Evaluation runs against the approved logical state/memory boundary.
+7. Events are surfaced and, only in an approved production design, submitted
+   through the accepted RA path.
 8. Process exit, executable replacement, module change, identity failure, or
    provider disconnect invalidates the session and disables evaluation.
 
@@ -233,38 +251,50 @@ The local SHA-256 answers:
 
 It is an allowlist, not a server identity. It must remain local and fail closed.
 
-### B. RetroAchievements identity
+### B. Official RA game/build identity mechanism
 
-An RA identity answers a different question:
+An official RA identity answers a different question:
 
-> “Which RA game/page and approved content definition does this running game
-> correspond to?”
+> “Which approved RA game/page/content and session does this running RCT
+> installation represent?”
 
-The official rcheevos guide describes `rc_client_begin_identify_and_load_game`
-for a console/file or buffer hash path, and `rc_client_begin_load_game` for an
-already-known hash. The current v12.1.0 header exposes both APIs, with the
-identify-and-hash API conditional on `RC_CLIENT_SUPPORTS_HASH`. The guide says
-the client hashes/identifies the game, resolves it to a game ID, fetches data,
-and starts a session; the host supplies HTTP and memory callbacks.
+This should be treated as an **official RA game/build identity mechanism**, not
+simply as “the RA hash.” The local SHA-256 and the official server identity may
+be two independent layers.
 
-The public game-identification documentation is console-specific. It does not
-establish a Windows RCT1 hashing method or a console assignment for this
-external process. The standalone Connect documentation says standalone game
-pages and primary game IDs are set up by the RA administration and are required
-for session calls.
+The current rcheevos guide describes two relevant `rc_client` paths:
+
+- `rc_client_begin_identify_and_load_game`, which identifies from a
+  console/file or buffer hash path when hash support is compiled in; and
+- `rc_client_begin_load_game`, which loads using an already-known hash.
+
+The guide describes the host-provided HTTP callback, game identification,
+resolution to a game ID, data loading, and session start. The v12.1.0 header
+contains these APIs, with the identify-and-hash API conditional on
+`RC_CLIENT_SUPPORTS_HASH`.
+
+The current Standalones documentation describes a different public model:
+administrators create Standalones game pages, the integration uses a primary
+game ID, an integration account and Connect token, and a player is linked to
+that integration before session calls. The documentation does not establish
+that this is the only acceptable architecture for an external RCT helper, but
+it does establish that a standalone page/game ID and approved server-side
+setup are part of that model.
 
 **OPEN QUESTION — RA clarification required:**
 
-1. What console/platform identity should this RCT standalone use?
-2. Would RA establish a Standalones game page and primary game ID?
-3. Should the integration use `rc_client_begin_load_game` with an approved RA
-   hash, a custom standalone Connect API game ID, or another approved path?
-4. What exact bytes/files or custom identity procedure should be hashed?
-5. Can multiple legitimate RCT builds map to one RA game page, and would each
-   require separate version-specific state maps?
-6. Can a local executable allowlist coexist with multiple RA-approved hashes?
+1. What official game/build identity mechanism should this RCT1 standalone use?
+2. Should the integration follow the documented Standalones / Connect API
+   model, `rc_client`/rcheevos, a hybrid, or another approved architecture?
+3. What platform/console identity and primary game ID would represent it?
+4. What exact bytes/files or custom identity procedure should be associated
+   with the approved game/build identity?
+5. Can multiple legitimate RCT builds map to one game page while retaining
+   separate version-specific state decoders?
+6. Can the local executable allowlist coexist with multiple RA-approved builds?
 
-No game ID, console ID, RA hash, or server entry is invented here.
+No game ID, console ID, RA hash, server entry, or Windows PE hashing scheme is
+invented here.
 
 Sources: [Game Identification](https://docs.retroachievements.org/developer-docs/game-identification.html),
 [rcheevos `rc_client` integration](https://github.com/RetroAchievements/rcheevos/wiki/rc_client-integration),
@@ -273,30 +303,52 @@ Sources: [Game Identification](https://docs.retroachievements.org/developer-docs
 
 ## 7. Authentication and session model
 
+Authentication is dependent on the architecture RA approves. The two
+documented models are not interchangeable.
+
+### A. `rc_client` / rcheevos model
+
 The pinned v12.1.0 API exposes:
 
 - `rc_client_begin_login_with_password(client, username, password, callback, userdata)`;
 - `rc_client_begin_login_with_token(client, username, token, callback, userdata)`;
 - `rc_client_get_user_info(client)`;
 - `rc_client_logout(client)`;
-- asynchronous callbacks carrying result/error state;
+- asynchronous callbacks carrying result/error state; and
 - a host-supplied `rc_client_server_call_t` responsible for HTTP behavior.
 
-The official integration guide says the host must provide networking and must
-use a unique versioned User-Agent. It also recommends replacing password use
-with a stored token after initial login. The standalone Connect guide describes
-a separate integration account, Web API key, Connect token, and player-linking
-flow; it explicitly treats those tokens as secrets.
+The official integration guide describes a player login/token flow, recommends
+using a remembered token after the initial password login, and expects the host
+to provide networking, UI, persistence, and a unique versioned User-Agent.
 
-**PROPOSED future behavior:** credentials would be supplied outside the repo,
-stored in an OS-appropriate secret store, never logged, and cleared/invalidated
-on logout. A failed or missing credential would leave the helper in local,
-non-networked mode. Client shutdown would unload the game, logout if the
-approved session model requires it, abort outstanding async work, and destroy
-`rc_client`.
+### B. Standalones / Connect API model
 
-**NOT DONE:** no login API has been called, no server callback performs HTTP,
-and no credential/token exists in this repository.
+The current Standalones guide describes an integration account, a Web API key,
+a Connect API token, a Standalones game page/primary game ID, and a player-link
+flow using a generated key in the player's account motto. It says OAuth2 is a
+future direction and is not production-ready in that guide. The Connect token
+and Web API key are secrets, not player credentials to commit or embed.
+
+This model has different trust and identity boundaries: the integration account
+represents the standalone integration, while the linked player account is the
+person for whom a session and award are made. A Connect session uses the
+approved primary game ID and linked username; it is not the same operation as
+`rc_client` player login and game loading.
+
+**PROPOSED future behavior for either model:** credentials would be supplied
+outside the repo, stored in an OS-appropriate secret store, never logged, and
+cleared/invalidated on logout. Missing credentials would leave the helper in
+local, non-networked mode. Shutdown would invalidate the state/session and
+perform the approved logout/unload behavior.
+
+**NOT DONE:** no login API has been called, no Connect request has been made,
+no server callback performs HTTP, and no credential/token exists in this
+repository.
+
+Choosing Connect versus `rc_client` is therefore not merely an HTTP-library
+decision: it changes player authentication, integration identity, game loading,
+definition retrieval, evaluation ownership, session handling, and unlock
+submission.
 
 Sources: [rcheevos integration — Login](https://github.com/RetroAchievements/rcheevos/wiki/rc_client-integration#login),
 [Standalone Connect API](https://api-docs.retroachievements.org/connect/standalone.html).
@@ -322,21 +374,23 @@ This path is **PROVEN locally** for one test condition requiring nonzero Guests
 and Park Rating. It is deliberately direct `rc_runtime` experimentation, not a
 production loaded RA game.
 
-### Eventual approved path
+### Eventual approved paths
 
 ```text
 approved RA definitions
-        -> rcheevos / rc_client
+        -> approved local evaluator (possibly rcheevos / rc_client)
         -> RCT memory/state adapter
         -> evaluation each game frame/tick
-        -> event handler
         -> approved session/unlock path
 ```
 
-The rcheevos guide requires the host to call `rc_client_do_frame` for every
-emulated frame and `rc_client_idle` when paused rather than silently stopping
-processing. For RCT, the equivalent cadence and pause semantics require RA
-review because this is not a conventional emulator frame loop.
+If RA approves `rc_client`, the rcheevos guide requires the host to call
+`rc_client_do_frame` for every emulated frame and `rc_client_idle` when paused
+rather than silently stopping processing. If RA approves the Standalones /
+Connect model, the host-side evaluator and session/award calls have a different
+responsibility split. For RCT, the cadence, pause semantics, definition source,
+and event/submission boundary require RA review because this is not a
+conventional emulator frame loop.
 
 **PROVEN:** local condition evaluation.
 
@@ -381,6 +435,17 @@ The table separates what this research currently enforces from what a future
 player client might technically attempt and what RA must decide. The current
 research GUI is never a Hardcore-safe player client.
 
+The central unresolved question is:
+
+> How much responsibility does RA expect an external RCT helper to assume for
+> detecting or preventing cheating performed outside the helper itself?
+
+The helper can reject an unknown executable and incomplete snapshot, but it
+cannot currently prove the absence of another process writing memory, a
+debugger, a trainer, injected code, altered saves, or external automation. It
+would be misleading to treat process-name detection for a tool such as Cheat
+Engine as adequate enforcement. No invasive anti-cheat is proposed here.
+
 | Threat / condition | Current state | Possible mitigation | RA requirement / question |
 |---|---|---|---|
 | Modified/unknown `RCT.EXE` | Supported SHA-256 gate fails closed | Signed/immutable manifest; recheck identity | **CURRENTLY ENFORCED** locally; RA acceptance TBD |
@@ -390,13 +455,13 @@ research GUI is never a Hardcore-safe player client.
 | Helper/client restart | No production client exists | Drop session and require new validated start | **PROPOSED** |
 | Provider disconnect/read failure | Snapshot rejects incomplete reads | Disable evaluation and report reason | **PROPOSED** |
 | `process_vm_writev` by this helper | No write API exists | Maintain build/test prohibition | **CURRENTLY ENFORCED** |
-| Another process writes memory | Not detectable by current reader | OS policy, anti-tamper signals, conservative Hardcore disable | **REQUIRES RA POLICY DECISION** |
-| Cheat Engine/memory editor | Not detected | Detect known tools only if RA accepts; cannot prove absence generally | **OPEN QUESTION — RA clarification** |
+| Another process writes memory | Not detectable by current reader | OS policy, conservative Hardcore disable, or an RA-approved trust model | **REQUIRES RA POLICY DECISION**; possibly not reliably enforceable |
+| Cheat Engine/memory editor | Not detected | Detect known tools only if RA accepts; this cannot prove absence generally | **OPEN QUESTION — RA clarification**; possibly not reliably enforceable |
 | Generic trainer | Not detected | Policy/allowlist or Hardcore disqualification | **REQUIRES RA POLICY DECISION** |
-| DLL injection/binary patch | Not detected | Module/integrity checks; tooling policy | **POSSIBLY UNENFORCEABLE** externally |
+| DLL injection/binary patch | Not detected | Module/integrity checks; tooling policy | **POSSIBLY NOT RELIABLY ENFORCEABLE** externally |
 | RCT mods/altered data files | Not validated | Hash/data manifest and conservative mode downgrade | **REQUIRES RA POLICY DECISION** |
 | Modified scenario files | Not validated | Scenario checksum/identity manifest | **OPEN QUESTION** |
-| Modified save files | Not validated | Save provenance impossible to prove from current fields | **POSSIBLY UNENFORCEABLE** |
+| Modified save files | Not validated | Save provenance impossible to prove from current fields | **POSSIBLY NOT RELIABLY ENFORCEABLE** |
 | Arbitrary save loading | No player mode exists | Reset/flag rules or Casual-only handling | **RA REQUIREMENT / policy clarification** |
 | Save scumming | Not detected | Define whether permitted per set/policy | **OPEN QUESTION** |
 | Pause | Provider can sample while paused | Use `rc_client_idle`; define pause-safe conditions | **PROPOSED**, RA review needed |
@@ -404,7 +469,7 @@ research GUI is never a Hardcore-safe player client.
 | OS clock changes | Not relevant to current fields | Avoid wall-clock trust; use game state/ticks | **REQUIRES MORE RESEARCH** |
 | Proton/Wine behavior | One supported runtime observed | Pin/test supported runtime; reject unknown environments if needed | **OPEN QUESTION** |
 | Debugger attachment | Not detected | Detect ptrace/debugger where reliable; otherwise disqualify | **RA REQUIREMENT / clarification** |
-| External automation/macros | Not detected | No input automation in helper; policy cannot be proven fully | **POSSIBLY UNENFORCEABLE** |
+| External automation/macros | Not detected | No input automation in helper; policy cannot be proven fully | **POSSIBLY NOT RELIABLY ENFORCEABLE** |
 | Achievement helper tampering | No player helper exists | Signed distribution, integrity checks, server validation | **REQUIRES RA POLICY DECISION** |
 
 **Important limitation:** an executable hash proves only that the mapped file
@@ -416,6 +481,15 @@ or trainer is present. The current project must not claim Hardcore compliance.
 rewind, slowdown, frame advance, and save-state loading; it also requires a
 unique versioned User-Agent and addresses memory editors/debuggers/TAS tooling.
 The standalone page additionally requires enforceable Hardcore restrictions.
+
+The current Hardcore Compliance Requirements also state that an emulator, or
+the parent emulator it is forked from, must have been publicly available for at
+least six months before Hardcore compliance approval. The page scopes that
+wording to emulator/parent-emulator approval. **OPEN QUESTION — RA clarification
+required:** whether and how this public-availability period applies to a newly
+developed external standalone helper such as this one. It may be relevant to a
+future compliance timeline, but it is not claimed here as a blocker to an
+initial prototype discussion or standalone proposal.
 
 Sources: [Hardcore Compliance Requirements](https://docs.retroachievements.org/general/hardcore-compliance-requirements.html),
 [Global Leaderboard and Achievement Hunting Rules](https://docs.retroachievements.org/guidelines/users/global-leaderboard-and-achievement-hunting-rules.html).
@@ -496,6 +570,7 @@ fresh-process, build-scoped, scenario/save-aware evidence.
 | Coherent snapshots | Yes | No | Proven prototype |
 | Local evaluation | Yes | No | Proven test-only |
 | RCT semantic state coverage | Partly | No | Incomplete |
+| Production architecture choice (`rc_client`, Connect, hybrid, other) | No | Yes | Open |
 | RA console/platform assignment | No | Yes | Open |
 | RA game ID/page | No | Yes | Open |
 | Official hash strategy | Partly | Yes | Open |
@@ -511,8 +586,9 @@ fresh-process, build-scoped, scenario/save-aware evidence.
 
 ### Blocker before contacting RA
 
-There is no technical blocker to asking for initial guidance. There are,
-however, blockers to production implementation: no RA identity, no approved
+There is no repository-side blocker to asking for initial guidance. There are,
+however, blockers to production implementation: no decision between the
+Standalones / Connect API and `rc_client` models, no RA identity, no approved
 standalone page, no Hardcore design, no save/scenario policy, and incomplete
 state coverage.
 
@@ -525,9 +601,14 @@ state coverage.
 - prepare a conceptual set plan and threat model;
 - identify a potential RA developer/set-design partner if required by policy.
 
+Further private engineering should not choose a production protocol before RA
+answers the architecture question. More local work is useful only where it is
+protocol-independent, such as state validation, fixtures, provenance, and
+threat-model evidence.
+
 ### Can wait until after RA guidance
 
-- choosing the final RA hash/console/game identity;
+- choosing the final RA game/build identity and production protocol;
 - implementing production HTTP and credential storage;
 - player UI, achievement list, placard, Rich Presence, and leaderboard UX;
 - final Hardcore enforcement and distribution model;
@@ -546,37 +627,46 @@ state coverage.
 These are deliberately limited to questions not answered by the current public
 documentation:
 
-1. Is the original Windows RCT Deluxe executable an eligible standalone target,
-   and which RA platform/console identity should represent it?
-2. Would RA create a Standalones game page and primary game ID for this project?
-3. What identity/hash input should an external helper use for a Windows PE game
-   whose runtime state is read from a separate process?
-4. Can several approved RCT executable builds map to one game page, and how
-   should build-specific memory maps be represented or reviewed?
-5. Is a normalized logical RCTState adapter acceptable, or must the integration
-   expose a conventional RA memory address space?
-6. What exact Hardcore restrictions are expected for external trainers,
-   debuggers, memory editors, DLL injection, Proton/Wine, and arbitrary saves?
-7. Should arbitrary saved parks be allowed in Hardcore, and what scenario-start
-   or save-provenance evidence is expected?
-8. What is the approved development/test-server workflow before any production
-   session or unlock call is made?
-9. What distribution, User-Agent, privacy, and support requirements apply to a
-   small external helper rather than a conventional emulator?
-10. Is an RA Developer/set-design partner required before a formal proposal can
-    proceed under the current standalone process?
+1. Would RA consider an external, read-only helper for the original Windows
+   RCT1 executable an acceptable standalone architecture?
+2. Should this integration follow the documented Standalones / Connect API
+   model, use `rc_client`/rcheevos for local evaluation, use a combination, or
+   follow another RA-supported architecture?
+3. Assuming the project is accepted, what official game/build identity
+   mechanism should the helper use, and how should the Standalones game page
+   and primary game ID process apply?
+4. Can multiple legitimate RCT1 executable builds be supported by one game
+   page while the helper maintains separate validated memory decoders?
+5. Is exposing a normalized logical RCTState memory space to achievement
+   definitions acceptable rather than exposing raw RCT process addresses?
+6. What integrity controls would RA expect an external helper to enforce for
+   memory editors/trainers, debugger attachment, DLL injection, runtime
+   modification, altered scenarios, and Proton/Wine?
+7. How should normal RCT saved-game loading be handled in Hardcore,
+   particularly for achievements intended to require a fresh scenario start?
+8. Does the current six-month public-availability requirement in Hardcore
+   Compliance Requirements apply to a newly developed standalone helper?
+9. If the architecture is acceptable in principle, what development/testing
+   workflow should be used before any real RA session or unlock submission?
+10. What additional prototype evidence would RAdmin want before considering
+    formal standalone approval?
 
 ## 17. Proposed next phase
 
-**Recommendation B — the proof of concept is mature enough for an initial RA
-discussion, but not for production integration.**
+**Recommendation B — the prototype is mature enough for an initial non-binding
+RA discussion, but not for production integration or Hardcore approval.**
 
 The recommendation is based on repository evidence: a supported-build gate,
 read-only provider, coherent snapshots, rcheevos lifecycle, deterministic
 fixtures, and a live local condition event. The remaining uncertainty is now
-primarily RA-specific identity, policy, and approval—not whether a read-only
-external prototype can technically observe and evaluate a small amount of RCT
-state.
+primarily the RA-specific production architecture, identity, policy, and
+approval—not whether a read-only external prototype can technically observe and
+evaluate a small amount of RCT state.
+
+The purpose of initial contact would be to obtain architectural and policy
+guidance before creating technical debt around the wrong production protocol.
+It would not request immediate approval, achievements, Hardcore certification,
+or production credentials.
 
 An eventual outreach package should include this draft, the concise proof
 summary, the executable/build identity distinction, the threat model, the
