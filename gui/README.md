@@ -31,11 +31,16 @@ Use Add bookmark for a research candidate and Watch selected for occasional
 manual refresh.
 
 Add bookmark opens an editor for the human-readable label, status, confidence,
-and notes. Existing bookmark metadata is prefilled when editing the same
-candidate; the stable build-scoped ID and module-relative locator are retained.
+and notes. Multiple selected candidates are edited and saved one at a time.
+Existing bookmark metadata is prefilled when editing the same candidate; the
+stable build-scoped ID and module-relative locator are retained.
 The editor also shows read-only address, module-relative offset, type, and
 build identity fields. Watch selected highlights watched rows in the table and
 keeps the highlight through refreshes and sorting.
+
+Use `Clear/New scan` to discard the current candidates, baseline, history, and
+watched rows without closing the GUI. Bookmarks and the process connection are
+preserved.
 
 Searches may optionally specify a module-relative range such as `0x69c000`
 to `0x69d000`. The range applies to new scans and existing candidate/baseline

@@ -58,6 +58,45 @@
           "notes": "Observed while manually pausing/unpausing the game. Paused = 1; running = 0. Candidate type: u16.",
           "date_discovered": "2026-09-27",
           "date_last_validated": null
+        },
+        {
+          "id": "candidate_69c59c",
+          "label": "Park Admission Price",
+          "module": "RCT.EXE",
+          "offset": "0x69c59c",
+          "type": "u16",
+          "status": "observed",
+          "confidence": "medium",
+          "build_hash": "bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76",
+          "notes": "value is x.10, ex $15.00 in game is 150 at mem location",
+          "date_discovered": "2026-09-27",
+          "date_last_validated": null
+        },
+        {
+          "id": "candidate_69c594",
+          "label": "Loan Amount",
+          "module": "RCT.EXE",
+          "offset": "0x69c594",
+          "type": "u32",
+          "status": "observed",
+          "confidence": "medium",
+          "build_hash": "bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76",
+          "notes": "value matches on screen amount",
+          "date_discovered": "2026-09-27",
+          "date_last_validated": null
+        },
+        {
+          "id": "candidate_80d468",
+          "label": "Loan Amount",
+          "module": "RCT.EXE",
+          "offset": "0x80d468",
+          "type": "u32",
+          "status": "observed",
+          "confidence": "medium",
+          "build_hash": "bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76",
+          "notes": "value matches on screen amount",
+          "date_discovered": "2026-09-27",
+          "date_last_validated": null
         }
       ]
     }

@@ -34,6 +34,7 @@ class App(tk.Tk):
         ttk.Label(controls, text="to").pack(side="left", padx=2); self.range_end = ttk.Entry(controls, width=9); self.range_end.pack(side="left")
         self.scan_button = ttk.Button(controls, text="Run scan/filter", command=self.run_scan); self.scan_button.pack(side="left", padx=4)
         ttk.Button(controls, text="Cancel", command=self.cancel_scan).pack(side="left", padx=4)
+        ttk.Button(controls, text="Clear/New scan", command=self.clear_scan).pack(side="left", padx=4)
         ttk.Checkbutton(controls, text="Continuous filter (1s)", variable=self.continuous).pack(side="left", padx=4)
         self.progress = ttk.Progressbar(controls, mode="determinate"); self.progress.pack(side="left", fill="x", expand=True, padx=8)
         self.count = tk.StringVar(value="Candidates: 0"); ttk.Label(controls, textvariable=self.count).pack(side="right", padx=5)
@@ -90,6 +91,13 @@ class App(tk.Tk):
         if self.continuous_job is not None:
             self.after_cancel(self.continuous_job); self.continuous_job = None
         if self.engine: self.engine.cancel.set()
+    def clear_scan(self):
+        has_results = self.engine and (self.engine.candidates or self.engine.baseline or self.watch_keys)
+        if has_results and not messagebox.askyesno("Clear scan", "Clear candidates, baseline, history, and watched rows?", parent=self): return
+        self.cancel_scan()
+        self.engine = SearchEngine(self.provider) if self.provider else None
+        self.watches.clear(); self.watch_keys.clear(); self.table.delete(*self.table.get_children())
+        self.count.set("Candidates: 0"); self.inspector.set("Select a candidate for read-only neighborhood inspection.")
     def scan_failed(self, error):
         self.scanning = False; self.continuous.set(False); self.scan_button.configure(state="normal")
         messagebox.showerror("Scan failed", f"{type(error).__name__}: {error}")
@@ -142,19 +150,20 @@ class App(tk.Tk):
             except OSError: self.inspector.set("Selected address is unavailable (process may have restarted).")
     def bookmark(self):
         if not self.info or self.info.build_status != "Supported" or not self.selected(): return
-        c = self.selected()[0]
         store = MetadataStore(); data = store.load(); locations = data.get("builds", {}).get(self.info.build_hash, {}).get("locations", [])
-        bookmark_id = f"candidate_{c.relative:x}"
-        existing = next((item for item in locations if item.get("id") == bookmark_id), {})
-        details = self.edit_bookmark(existing, c)
-        if details is None: return
-        today = datetime.now(timezone.utc).date().isoformat()
-        loc = {"id": bookmark_id, "label": details["label"], "module": "RCT.EXE", "offset": f"0x{c.relative:x}", "type": c.type_name,
-               "status": details["status"], "confidence": details["confidence"], "build_hash": self.info.build_hash,
-               "notes": details["notes"], "date_discovered": existing.get("date_discovered", today),
-               "date_last_validated": today if details["status"] == "validated" else existing.get("date_last_validated")}
-        store.save_location(self.info.build_hash, loc)
-        messagebox.showinfo("Bookmark saved", f"Saved {details['label']} to {METADATA_PATH}")
+        saved = []
+        for c in self.selected():
+            bookmark_id = f"candidate_{c.relative:x}"
+            existing = next((item for item in locations if item.get("id") == bookmark_id), {})
+            details = self.edit_bookmark(existing, c)
+            if details is None: break
+            today = datetime.now(timezone.utc).date().isoformat()
+            loc = {"id": bookmark_id, "label": details["label"], "module": "RCT.EXE", "offset": f"0x{c.relative:x}", "type": c.type_name,
+                   "status": details["status"], "confidence": details["confidence"], "build_hash": self.info.build_hash,
+                   "notes": details["notes"], "date_discovered": existing.get("date_discovered", today),
+                   "date_last_validated": today if details["status"] == "validated" else existing.get("date_last_validated")}
+            store.save_location(self.info.build_hash, loc); saved.append(details["label"])
+        if saved: messagebox.showinfo("Bookmarks saved", f"Saved {len(saved)} bookmark(s) to {METADATA_PATH}")
     def edit_bookmark(self, existing, candidate):
         dialog = tk.Toplevel(self); dialog.title("Add / Edit Bookmark"); dialog.transient(self); dialog.grab_set()
         fields = {"label": existing.get("label", f"Candidate 0x{candidate.relative:x}"),
