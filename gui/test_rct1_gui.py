@@ -36,6 +36,13 @@ class GuiLogicTests(unittest.TestCase):
         engine.candidates = [Candidate(0x400000, 0, "u16", 1, 1), Candidate(0x400004, 4, "u16", 1, 1)]
         engine.scan("unchanged", type_names=["u16"], scan_start=4, scan_end=6)
         self.assertEqual([candidate.relative for candidate in engine.candidates], [4])
+
+    def test_snapshot_restore_preserves_candidate_history(self):
+        class Provider:
+            info = type("Info", (), {"pid": 7, "base": 0x400000, "build_hash": SUPPORTED_BUILD})()
+        engine = SearchEngine(Provider()); engine.candidates = [Candidate(0x400004, 4, "u32", 9, 4)]
+        snapshot = engine.snapshot(); engine.candidates.clear(); engine.restore(snapshot)
+        self.assertEqual(engine.candidates[0].history, [4, 9])
     def test_session_is_build_scoped(self):
         class Provider:
             info = type("Info", (), {"pid": 7, "base": 0x500000, "build_hash": SUPPORTED_BUILD})()

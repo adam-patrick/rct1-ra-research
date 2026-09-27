@@ -34,19 +34,6 @@
           "confidence": "medium"
         },
         {
-          "id": "candidate_69c598",
-          "label": "Possible Park Open State",
-          "module": "RCT.EXE",
-          "offset": "0x69c598",
-          "type": "u16",
-          "status": "candidate",
-          "confidence": "low",
-          "build_hash": "bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76",
-          "notes": "Saved from GUI scan",
-          "date_discovered": "2026-09-27",
-          "date_last_validated": null
-        },
-        {
           "id": "candidate_837658",
           "label": "Possible Simulation Pause Flag",
           "module": "RCT.EXE",
@@ -95,6 +82,45 @@
           "confidence": "medium",
           "build_hash": "bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76",
           "notes": "value matches on screen amount",
+          "date_discovered": "2026-09-27",
+          "date_last_validated": null
+        },
+        {
+          "id": "candidate_69d900",
+          "label": "Company Value",
+          "module": "RCT.EXE",
+          "offset": "0x69d900",
+          "type": "u32",
+          "status": "observed",
+          "confidence": "medium",
+          "build_hash": "bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76",
+          "notes": "value x 10, ex $387.20 = 3872 in mem",
+          "date_discovered": "2026-09-27",
+          "date_last_validated": null
+        },
+        {
+          "id": "candidate_69d6f0",
+          "label": "Park Value",
+          "module": "RCT.EXE",
+          "offset": "0x69d6f0",
+          "type": "u32",
+          "status": "observed",
+          "confidence": "medium",
+          "build_hash": "bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76",
+          "notes": "Value x 10, ex $1556.20 = 15562 in mem",
+          "date_discovered": "2026-09-27",
+          "date_last_validated": null
+        },
+        {
+          "id": "candidate_69c598",
+          "label": "Park Open State",
+          "module": "RCT.EXE",
+          "offset": "0x69c598",
+          "type": "u16",
+          "status": "candidate",
+          "confidence": "medium",
+          "build_hash": "bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76",
+          "notes": "1 = Open, 0 = Closed",
           "date_discovered": "2026-09-27",
           "date_last_validated": null
         }

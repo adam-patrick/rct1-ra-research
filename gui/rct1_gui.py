@@ -7,6 +7,7 @@ API in this module.
 from __future__ import annotations
 
 import ctypes
+import copy
 import hashlib
 import json
 import os
@@ -264,6 +265,18 @@ class SearchEngine:
         if start is not None and end is not None and end <= start:
             raise ValueError("scan range end must be greater than scan range start")
         return start, end
+
+    def snapshot(self) -> dict:
+        return {"candidates": copy.deepcopy(self.candidates), "baseline": list(self.baseline),
+                "baseline_types": list(self.baseline_types), "truncated": self.truncated,
+                "scan_message": self.scan_message}
+
+    def restore(self, snapshot: dict) -> None:
+        self.candidates = copy.deepcopy(snapshot["candidates"])
+        self.baseline = list(snapshot["baseline"])
+        self.baseline_types = list(snapshot["baseline_types"])
+        self.truncated = snapshot["truncated"]
+        self.scan_message = snapshot["scan_message"]
 
     def save_session(self, path: Path) -> None:
         payload = {"version": 1, "pid": self.provider.info.pid, "base": self.provider.info.base,

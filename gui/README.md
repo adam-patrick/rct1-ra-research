@@ -13,6 +13,9 @@
 - Supports watches with persistent visual row highlighting.
 - Supports editable, build-scoped bookmarks with labels, status, confidence, notes, and locator facts.
 - Provides a live bookmark review window with refresh and edit actions.
+- Provides bounded Undo/Redo for completed scan/filter operations.
+- Exports candidate histories to JSON or CSV.
+- Provides a readable-private-memory region picker for filling scan ranges.
 - Supports continuous one-second refinement filtering.
 - Saves and loads build-scoped JSON scan sessions.
 
@@ -57,6 +60,12 @@ keeps the highlight through refreshes and sorting.
 Use `Clear/New scan` to discard the current candidates, baseline, history, and
 watched rows without closing the GUI. Bookmarks and the process connection are
 preserved.
+
+`Undo` and `Redo` cover the most recent completed scan/filter states, up to a
+bounded history, and are cleared on a new process or loaded session. `Export
+candidates` writes the current candidate values and histories as JSON or CSV.
+`Choose region` lists readable private mappings and fills the module-relative
+range controls for targeted scans.
 
 Use `Review bookmarks` to open a build-scoped bookmark window showing the
 current runtime address, module-relative offset, type, current value, status,

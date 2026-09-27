@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import csv
+import json
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -17,6 +19,8 @@ class App(tk.Tk):
         self.continuous_job = None
         self.sort_column = None
         self.sort_reverse = False
+        self.undo_stack = []
+        self.redo_stack = []
         self._build(); self.after(1000, self.refresh_status)
     def _build(self):
         status = ttk.LabelFrame(self, text="Process / Game Status"); status.pack(fill="x", padx=8, pady=8)
@@ -32,6 +36,7 @@ class App(tk.Tk):
         self.typevar = tk.StringVar(value="u16"); ttk.Combobox(controls, textvariable=self.typevar, values=list(TYPES), state="readonly", width=7).pack(side="left", padx=4)
         ttk.Label(controls, text="Range +").pack(side="left", padx=(8, 2)); self.range_start = ttk.Entry(controls, width=9); self.range_start.pack(side="left")
         ttk.Label(controls, text="to").pack(side="left", padx=2); self.range_end = ttk.Entry(controls, width=9); self.range_end.pack(side="left")
+        ttk.Button(controls, text="Choose region", command=self.choose_region).pack(side="left", padx=4)
         self.scan_button = ttk.Button(controls, text="Run scan/filter", command=self.run_scan); self.scan_button.pack(side="left", padx=4)
         ttk.Button(controls, text="Cancel", command=self.cancel_scan).pack(side="left", padx=4)
         ttk.Button(controls, text="Clear/New scan", command=self.clear_scan).pack(side="left", padx=4)
@@ -54,6 +59,9 @@ class App(tk.Tk):
         ttk.Button(bottom, text="Save session", command=self.save_session).pack(side="left", padx=3)
         ttk.Button(bottom, text="Load session", command=self.load_session).pack(side="left", padx=3)
         ttk.Button(bottom, text="Review bookmarks", command=self.review_bookmarks).pack(side="left", padx=3)
+        ttk.Button(bottom, text="Undo", command=self.undo).pack(side="left", padx=3)
+        ttk.Button(bottom, text="Redo", command=self.redo).pack(side="left", padx=3)
+        ttk.Button(bottom, text="Export candidates", command=self.export_candidates).pack(side="left", padx=3)
         self.inspector = tk.StringVar(value="Select a candidate for read-only neighborhood inspection."); ttk.Label(bottom, textvariable=self.inspector).pack(side="left", padx=15)
     def refresh_status(self):
         old = self.info.pid if self.info else None
@@ -61,6 +69,9 @@ class App(tk.Tk):
         if not self.info:
             self.status_text.set("RCT1: DISCONNECTED\nMemory Access: unavailable\nScan: idle"); self.state_text.set("Unavailable"); self.after(1500, self.refresh_status); return
         changed = old is not None and old != self.info.pid
+        if changed:
+            self.undo_stack.clear(); self.redo_stack.clear()
+            self.engine = None; self.watches.clear(); self.watch_keys.clear()
         self.status_text.set(f"RCT1: CONNECTED\nPID: {self.info.pid}\nPath: {self.info.path}\nModule Base: 0x{self.info.base:08x}\nBuild: {(self.info.build_hash or 'unavailable')}\nBuild Status: {self.info.build_status}\nMemory Access: Read Only\nScan: {'process changed; reconnecting' if changed else 'ready'}")
         if self.info.build_status == "Supported":
             values = read_state(self.provider); self.state_text.set(f"Cash: {format_cash(values['cash']) if values['cash'] is not None else 'unavailable'}\nGuests: {values['guest_count']}\nPark Rating: {values['park_rating']}\nSnapshot: {datetime.now(timezone.utc).isoformat(timespec='seconds')}")
@@ -79,12 +90,13 @@ class App(tk.Tk):
         scan_end = int(self.range_end.get(), 0) if self.range_end.get().strip() else None
         if scan_start is not None and scan_end is not None and scan_end <= scan_start:
             return messagebox.showwarning("Scan range", "Range end must be greater than range start.")
+        before = self.engine.snapshot()
         self.progress.configure(value=0); self.engine.cancel.clear(); self.scanning = True; self.scan_button.configure(state="disabled")
-        threading.Thread(target=self._scan_thread, args=(mode, value, scan_start, scan_end), daemon=True).start()
-    def _scan_thread(self, mode, value, scan_start, scan_end):
+        threading.Thread(target=self._scan_thread, args=(mode, value, scan_start, scan_end, before), daemon=True).start()
+    def _scan_thread(self, mode, value, scan_start, scan_end, before):
         try:
             self.engine.scan(mode, value, [self.typevar.get()], value or 0 if mode.endswith("_by") else 0, scan_start, scan_end)
-            self.after(0, lambda: self.populate(mode))
+            self.after(0, lambda: self.finish_scan(mode, before))
         except Exception as error:
             self.after(0, lambda: self.scan_failed(error))
     def cancel_scan(self):
@@ -97,8 +109,13 @@ class App(tk.Tk):
         if has_results and not messagebox.askyesno("Clear scan", "Clear candidates, baseline, history, and watched rows?", parent=self): return
         self.cancel_scan()
         self.engine = SearchEngine(self.provider) if self.provider else None
+        self.undo_stack.clear(); self.redo_stack.clear()
         self.watches.clear(); self.watch_keys.clear(); self.table.delete(*self.table.get_children())
         self.count.set("Candidates: 0"); self.inspector.set("Select a candidate for read-only neighborhood inspection.")
+    def finish_scan(self, mode, before):
+        if self.engine and not self.engine.cancel.is_set():
+            self.undo_stack.append(before); self.undo_stack = self.undo_stack[-8:]; self.redo_stack.clear()
+        self.populate(mode)
     def scan_failed(self, error):
         self.scanning = False; self.continuous.set(False); self.scan_button.configure(state="normal")
         messagebox.showerror("Scan failed", f"{type(error).__name__}: {error}")
@@ -141,6 +158,48 @@ class App(tk.Tk):
         else:
             self.sort_column, self.sort_reverse = column, False
         self.populate()
+    def undo(self):
+        if self.scanning or not self.engine or not self.undo_stack: return
+        self.redo_stack.append(self.engine.snapshot())
+        self.engine.restore(self.undo_stack.pop()); self.populate()
+    def redo(self):
+        if self.scanning or not self.engine or not self.redo_stack: return
+        self.undo_stack.append(self.engine.snapshot())
+        self.engine.restore(self.redo_stack.pop()); self.populate()
+    def export_candidates(self):
+        if not self.engine or not self.engine.candidates: return messagebox.showinfo("Export", "There are no candidates to export.")
+        path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON", "*.json"), ("CSV", "*.csv")])
+        if not path: return
+        candidates = [asdict(candidate) for candidate in self.engine.candidates]
+        if path.lower().endswith(".csv"):
+            fields = ["address", "relative", "type_name", "current", "previous", "delta", "history", "label", "status"]
+            with open(path, "w", newline="", encoding="utf-8") as stream:
+                writer = csv.DictWriter(stream, fieldnames=fields); writer.writeheader()
+                for item in candidates:
+                    item["history"] = ",".join(str(value) for value in item["history"]); writer.writerow({key: item.get(key, "") for key in fields})
+        else:
+            payload = {"version": 1, "pid": self.info.pid, "base": self.info.base, "build_hash": self.info.build_hash, "candidates": candidates}
+            Path(path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        messagebox.showinfo("Export", f"Exported {len(candidates):,} candidates.")
+    def choose_region(self):
+        if not self.provider or not self.info: return messagebox.showwarning("Region", "Connect to RCT first.")
+        window = tk.Toplevel(self); window.title("Choose Readable Private Region"); window.geometry("760x360"); window.transient(self)
+        columns = ("start", "end", "relative", "size")
+        table = ttk.Treeview(window, columns=columns, show="headings", selectmode="browse")
+        for column in columns: table.heading(column, text=column.title()); table.column(column, width=150)
+        table.pack(fill="both", expand=True, padx=8, pady=8)
+        mappings = self.provider.mappings()
+        for index, (start, end) in enumerate(mappings):
+            table.insert("", "end", iid=str(index), values=(f"0x{start:08x}", f"0x{end:08x}", f"+0x{start - self.info.base:x}", f"{end - start:,} bytes"))
+        def choose():
+            selected = table.selection()
+            if not selected: return
+            start, end = mappings[int(selected[0])]
+            self.range_start.delete(0, tk.END); self.range_start.insert(0, hex(start - self.info.base))
+            self.range_end.delete(0, tk.END); self.range_end.insert(0, hex(end - self.info.base)); window.destroy()
+        buttons = ttk.Frame(window); buttons.pack(fill="x", padx=8, pady=(0, 8))
+        ttk.Button(buttons, text="Use selected region", command=choose).pack(side="left", padx=3)
+        ttk.Button(buttons, text="Close", command=window.destroy).pack(side="right", padx=3)
     def selected(self):
         return [self.engine.candidates[int(x)] for x in self.table.selection()]
     def inspect(self, _event=None):
@@ -258,7 +317,7 @@ class App(tk.Tk):
         path = filedialog.askopenfilename(initialdir=str(ROOT / "gui" / "sessions"), filetypes=[("JSON", "*.json")])
         if path:
             try:
-                self.engine = SearchEngine(self.provider); self.engine.load_session(Path(path)); self.populate()
+                self.engine = SearchEngine(self.provider); self.engine.load_session(Path(path)); self.undo_stack.clear(); self.redo_stack.clear(); self.populate()
             except (OSError, ValueError, json.JSONDecodeError) as error:
                 messagebox.showerror("Session load failed", str(error))
 
