@@ -252,4 +252,14 @@ memory-grid view used by tools such as the screenshot reference:
 The view must remain bounded to the selected candidate/bookmark neighborhood
 and read-only. A pause/unpause flag should therefore change in the viewer
 automatically when the game changes it, without requiring the user to press
-Refresh.
+Refresh. This enhancement is now implemented in the Hex grid tab; it polls the
+bounded neighborhood every 250 ms while Live refresh is enabled.
+
+### Paged memory browser
+
+The GUI also provides a paged browser for readable process mappings. It supports
+address jumps, previous/next page navigation, 256-byte/4 KiB/16 KiB page sizes,
+the same 8/16/32-bit grid modes, and live refresh limited to the visible page.
+It deliberately does not materialize the entire process address space, which
+keeps browsing responsive and avoids repeating the memory pressure seen during
+large scans.

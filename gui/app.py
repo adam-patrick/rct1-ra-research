@@ -10,6 +10,21 @@ from .rct1_gui import *
 MAX_DISPLAY_ROWS = 5_000
 CONTINUOUS_MODES = {"changed", "unchanged", "increased", "decreased", "increased_by", "decreased_by"}
 
+def format_hex_grid(data, start, display_bits):
+    width = display_bits // 8
+    bit_header = " ".join(str(bit) for bit in range(display_bits - 1, -1, -1))
+    lines = [f"{display_bits}-bit little-endian view; bit positions: {bit_header}",
+             "Address        " + "  ".join(f"+0x{i:04x}" for i in range(0, 16, width))]
+    for row_start in range(0, len(data), 16):
+        cells = []
+        for offset in range(row_start, min(row_start + 16, len(data)), width):
+            chunk = data[offset:offset + width]
+            if len(chunk) < width:
+                cells.append("".ljust(display_bits // 4)); continue
+            cells.append(f"{int.from_bytes(chunk, 'little'):0{display_bits // 4}x}")
+        lines.append(f"0x{start + row_start:08x}  " + "  ".join(cells))
+    return "\n".join(lines)
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__(); self.title("RCT1 Read-Only Memory Research"); self.geometry("1180x760")
@@ -55,6 +70,7 @@ class App(tk.Tk):
         bottom = ttk.Frame(self); bottom.pack(fill="x", padx=8, pady=5)
         ttk.Button(bottom, text="Add bookmark", command=self.bookmark).pack(side="left", padx=3)
         ttk.Button(bottom, text="Typed memory view", command=self.view_selected_memory).pack(side="left", padx=3)
+        ttk.Button(bottom, text="Memory browser", command=self.open_memory_browser).pack(side="left", padx=3)
         ttk.Button(bottom, text="Watch selected", command=self.watch_selected).pack(side="left", padx=3)
         ttk.Button(bottom, text="Refresh watches", command=self.refresh_watches).pack(side="left", padx=3)
         ttk.Button(bottom, text="Save session", command=self.save_session).pack(side="left", padx=3)
@@ -221,15 +237,22 @@ class App(tk.Tk):
         ttk.Label(window, textvariable=header, justify="left").pack(anchor="w", padx=8, pady=(8, 2))
         ttk.Label(window, textvariable=timestamp).pack(anchor="w", padx=8, pady=(0, 5))
         controls = ttk.Frame(window); controls.pack(fill="x", padx=8, pady=3)
-        radius = tk.IntVar(value=16); live = tk.BooleanVar(value=False); live_job = [None]
+        radius = tk.IntVar(value=16); live = tk.BooleanVar(value=True); display_bits = tk.IntVar(value=8); live_job = [None]
         ttk.Label(controls, text="Bytes around address:").pack(side="left")
-        ttk.Combobox(controls, textvariable=radius, values=[8, 16, 32], state="readonly", width=5).pack(side="left", padx=4)
-        table = ttk.Treeview(window, columns=("offset", "address", "byte", "ascii", "u8", "s8", "u16", "s16", "u32", "s32"), show="headings")
+        radius_box = ttk.Combobox(controls, textvariable=radius, values=[8, 16, 32], state="readonly", width=5); radius_box.pack(side="left", padx=4)
+        ttk.Label(controls, text="Grid:").pack(side="left", padx=(12, 2))
+        for bits in (8, 16, 32): ttk.Radiobutton(controls, text=f"{bits}-bit", variable=display_bits, value=bits).pack(side="left", padx=2)
+        notebook = ttk.Notebook(window); notebook.pack(fill="both", expand=True, padx=8, pady=5)
+        decoded_frame = ttk.Frame(notebook); grid_frame = ttk.Frame(notebook)
+        notebook.add(decoded_frame, text="Decoded values"); notebook.add(grid_frame, text="Hex grid")
+        table = ttk.Treeview(decoded_frame, columns=("offset", "address", "byte", "ascii", "u8", "s8", "u16", "s16", "u32", "s32"), show="headings")
         headings = {"offset": "Offset", "address": "Address", "byte": "Byte", "ascii": "ASCII", "u8": "u8", "s8": "s8", "u16": "u16 LE", "s16": "s16 LE", "u32": "u32 LE", "s32": "s32 LE"}
         for column in table["columns"]:
             table.heading(column, text=headings[column]); table.column(column, width=88, anchor="center")
         table.column("address", width=115); table.column("byte", width=70); table.column("ascii", width=65)
         table.pack(fill="both", expand=True, padx=8, pady=5)
+        grid = tk.Text(grid_frame, wrap="none", font=("Courier New", 10), state="disabled", background="#f4f4f4")
+        grid.pack(fill="both", expand=True, padx=5, pady=5)
         def refresh():
             if not self.info or not self.provider or self.info.pid != self.provider.info.pid:
                 header.set("Process unavailable or restarted; close this viewer."); return
@@ -243,17 +266,76 @@ class App(tk.Tk):
             for row in typed_memory_rows(data):
                 absolute = start + int(row["offset"])
                 table.insert("", "end", values=(f"{int(row['offset']) - (address - start):+d}", f"0x{absolute:08x}", row["byte"], row["ascii"], row["u8"], row["s8"], row["u16"], row["s16"], row["u32"], row["s32"]))
-            if live.get(): live_job[0] = window.after(1000, refresh)
+            grid.configure(state="normal"); grid.delete("1.0", tk.END); grid.insert("1.0", format_hex_grid(data, start, display_bits.get())); grid.configure(state="disabled")
+            if live.get(): live_job[0] = window.after(250, refresh)
         def toggle_live():
             if live.get(): refresh()
             elif live_job[0] is not None:
                 window.after_cancel(live_job[0]); live_job[0] = None
+        def refresh_from_control(_event=None):
+            if live_job[0] is not None: window.after_cancel(live_job[0]); live_job[0] = None
+            refresh()
         def close():
             if live_job[0] is not None: window.after_cancel(live_job[0])
             window.destroy()
-        ttk.Button(controls, text="Refresh", command=refresh).pack(side="left", padx=4)
-        ttk.Checkbutton(controls, text="Live refresh (1s)", variable=live, command=toggle_live).pack(side="left", padx=4)
+        ttk.Button(controls, text="Refresh", command=refresh_from_control).pack(side="left", padx=4)
+        ttk.Checkbutton(controls, text="Live refresh (250 ms)", variable=live, command=toggle_live).pack(side="left", padx=4)
         ttk.Button(controls, text="Close", command=close).pack(side="right", padx=4)
+        radius_box.bind("<<ComboboxSelected>>", refresh_from_control)
+        window.protocol("WM_DELETE_WINDOW", close); refresh()
+    def open_memory_browser(self):
+        if not self.info or not self.provider or self.info.build_status != "Supported":
+            return messagebox.showwarning("Memory browser", "Connect to the supported RCT.EXE build first.")
+        mappings = self.provider.mappings()
+        if not mappings:
+            return messagebox.showinfo("Memory browser", "No readable private memory regions are available.")
+        window = tk.Toplevel(self); window.title("RCT1 Read-Only Memory Browser"); window.geometry("1050x650"); window.transient(self)
+        region_var = tk.StringVar(); address_var = tk.StringVar(); page_var = tk.IntVar(value=4096); bits_var = tk.IntVar(value=8); live = tk.BooleanVar(value=True); live_job = [None]
+        region_values = [f"0x{start:08x} - 0x{end:08x} ({end - start:,} bytes)" for start, end in mappings]
+        region_var.set(region_values[0]); address_var.set(hex(mappings[0][0]))
+        header = tk.StringVar(); timestamp = tk.StringVar()
+        top = ttk.Frame(window); top.pack(fill="x", padx=8, pady=6)
+        ttk.Label(top, text="Region:").pack(side="left")
+        region_box = ttk.Combobox(top, textvariable=region_var, values=region_values, state="readonly", width=38); region_box.pack(side="left", padx=4)
+        ttk.Label(top, text="Address:").pack(side="left", padx=(10, 2)); address_entry = ttk.Entry(top, textvariable=address_var, width=13); address_entry.pack(side="left")
+        ttk.Label(top, text="Page:").pack(side="left", padx=(10, 2)); page_box = ttk.Combobox(top, textvariable=page_var, values=[256, 4096, 16384], state="readonly", width=7); page_box.pack(side="left")
+        ttk.Label(top, text="Grid:").pack(side="left", padx=(10, 2))
+        for bits in (8, 16, 32): ttk.Radiobutton(top, text=str(bits), variable=bits_var, value=bits).pack(side="left", padx=2)
+        ttk.Label(window, textvariable=header, justify="left").pack(anchor="w", padx=8)
+        ttk.Label(window, textvariable=timestamp).pack(anchor="w", padx=8, pady=(0, 3))
+        grid = tk.Text(window, wrap="none", font=("Courier New", 10), state="disabled", background="#f4f4f4"); grid.pack(fill="both", expand=True, padx=8, pady=5)
+        def selected_region(): return mappings[region_values.index(region_var.get())]
+        def refresh():
+            if not self.info or not self.provider or self.info.pid != self.provider.info.pid:
+                header.set("Process unavailable or restarted; close this browser."); return
+            region_start, region_end = selected_region()
+            try: requested = int(address_var.get().strip(), 0)
+            except ValueError:
+                header.set("Enter a valid hexadecimal or decimal address."); return
+            start = min(max(requested, region_start), max(region_start, region_end - 1)); size = min(page_var.get(), region_end - start)
+            try: data = self.provider.read(start, size)
+            except OSError:
+                header.set("Memory page is unavailable (process may have restarted)."); return
+            address_var.set(hex(start)); header.set(f"Region 0x{region_start:08x}-0x{region_end:08x}   showing 0x{start:08x}-0x{start + len(data):08x}\nPID {self.info.pid}   module base 0x{self.info.base:08x}   read-only")
+            timestamp.set(f"Refreshed {datetime.now(timezone.utc).isoformat(timespec='seconds')}   ({len(data):,} bytes)")
+            grid.configure(state="normal"); grid.delete("1.0", tk.END); grid.insert("1.0", format_hex_grid(data, start, bits_var.get())); grid.configure(state="disabled")
+            if live.get(): live_job[0] = window.after(250, refresh)
+        def cancel_timer():
+            if live_job[0] is not None: window.after_cancel(live_job[0]); live_job[0] = None
+        def control_refresh(_event=None): cancel_timer(); refresh()
+        def move_page(amount):
+            start, end = selected_region(); current = int(address_var.get(), 0); address_var.set(hex(min(max(start, current + amount * page_var.get()), max(start, end - 1)))); control_refresh()
+        def choose_region(_event=None): address_var.set(hex(selected_region()[0])); control_refresh()
+        def toggle_live(): cancel_timer(); refresh() if live.get() else None
+        def close(): cancel_timer(); window.destroy()
+        buttons = ttk.Frame(window); buttons.pack(fill="x", padx=8, pady=(0, 8))
+        ttk.Button(buttons, text="Previous page", command=lambda: move_page(-1)).pack(side="left", padx=3)
+        ttk.Button(buttons, text="Next page", command=lambda: move_page(1)).pack(side="left", padx=3)
+        ttk.Button(buttons, text="Go", command=control_refresh).pack(side="left", padx=3)
+        ttk.Button(buttons, text="Refresh", command=control_refresh).pack(side="left", padx=3)
+        ttk.Checkbutton(buttons, text="Live refresh (250 ms)", variable=live, command=toggle_live).pack(side="left", padx=8)
+        ttk.Button(buttons, text="Close", command=close).pack(side="right", padx=3)
+        region_box.bind("<<ComboboxSelected>>", choose_region); page_box.bind("<<ComboboxSelected>>", control_refresh); address_entry.bind("<Return>", control_refresh)
         window.protocol("WM_DELETE_WINDOW", close); refresh()
     def bookmark(self):
         if not self.info or self.info.build_status != "Supported" or not self.selected(): return

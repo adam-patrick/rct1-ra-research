@@ -20,7 +20,10 @@
 - Saves and loads build-scoped JSON scan sessions.
 - Opens a bounded typed-memory viewer for a selected candidate or bookmark,
   showing raw bytes, ASCII, and signed/unsigned little-endian 8-, 16-, and
-  32-bit interpretations with manual or one-second live refresh.
+  32-bit interpretations with manual or automatic 250 ms live refresh.
+- Provides a paged memory browser for readable regions, address jumps, previous/
+  next page navigation, configurable page sizes, and live refresh limited to
+  the visible page.
 
 This is a small Python/Tkinter frontend for the existing evidence-driven RCT1
 research workflow. It detects `RCT.EXE`, derives the current module base from
@@ -76,8 +79,16 @@ confidence, and notes. The window supports refreshing values and editing the
 selected bookmark. Select a bookmark and use `Typed memory view` to inspect its
 surrounding bytes without writing to the process. The candidate table has the
 same viewer action for a selected candidate. The viewer displays the current
-PID, module base, and refresh timestamp; live refresh is bounded to the small
-neighborhood around the selected address.
+PID, module base, and refresh timestamp; live refresh starts automatically and
+is bounded to the small neighborhood around the selected address. The Hex grid
+tab groups the bytes as 8-, 16-, or 32-bit little-endian values and shows the
+corresponding bit positions. Disable Live refresh to inspect a stable snapshot.
+
+Use `Memory browser` to browse readable process mappings without selecting a
+candidate first. Choose a region, enter an absolute address, select a 256-byte,
+4 KiB, or 16 KiB page, and use Previous/Next page or Go. The browser never
+loads the entire address space into the GUI; only the visible page is read and
+rendered.
 
 Searches may optionally specify a module-relative range such as `0x69c000`
 to `0x69d000`. The range applies to new scans and existing candidate/baseline
