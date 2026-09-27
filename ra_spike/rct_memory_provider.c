@@ -1,7 +1,9 @@
 #include "rct_memory_provider.h"
 
+#include <openssl/evp.h>
 #include <dirent.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +12,7 @@
 #define GUESTS_OFFSET 0x69c9f8U
 #define PARK_RATING_OFFSET 0x69ce64U
 #define CASH_OFFSET 0x69c590U
+#define SUPPORTED_RCT_SHA256 "bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76"
 
 static int is_decimal(const char* text) {
   if (text == NULL || *text == '\0') return 0;
@@ -70,11 +73,75 @@ static uintptr_t find_module_base(pid_t pid) {
   return 0;
 }
 
+static int validate_executable_hash(pid_t pid) {
+  char path[128];
+  char line[1024];
+  char executable[PATH_MAX];
+  unsigned char digest[EVP_MAX_MD_SIZE];
+  unsigned int digest_size = 0;
+  char digest_text[EVP_MAX_MD_SIZE * 2 + 1];
+  FILE* maps;
+  FILE* executable_file;
+  EVP_MD_CTX* context;
+  unsigned char buffer[65536];
+  size_t bytes_read;
+  int i;
+
+  snprintf(path, sizeof(path), "/proc/%d/maps", (int)pid);
+  maps = fopen(path, "r");
+  if (maps == NULL) return 0;
+  executable[0] = '\0';
+  while (fgets(line, sizeof(line), maps) != NULL) {
+    char* marker = strstr(line, "/RCT.EXE");
+    char* start;
+    char* end;
+    if (marker == NULL) continue;
+    start = marker;
+    while (start > line && start[-1] != ' ') --start;
+    end = strchr(marker, '\n');
+    if (end == NULL) end = line + strlen(line);
+    if ((size_t)(end - start) >= sizeof(executable)) continue;
+    memcpy(executable, start, (size_t)(end - start));
+    executable[end - start] = '\0';
+    break;
+  }
+  fclose(maps);
+  if (executable[0] == '\0') return 0;
+
+  executable_file = fopen(executable, "rb");
+  if (executable_file == NULL) return 0;
+  context = EVP_MD_CTX_new();
+  if (context == NULL || EVP_DigestInit_ex(context, EVP_sha256(), NULL) != 1) {
+    if (context != NULL) EVP_MD_CTX_free(context);
+    fclose(executable_file);
+    return 0;
+  }
+  while ((bytes_read = fread(buffer, 1, sizeof(buffer), executable_file)) > 0) {
+    if (EVP_DigestUpdate(context, buffer, bytes_read) != 1) {
+      EVP_MD_CTX_free(context);
+      fclose(executable_file);
+      return 0;
+    }
+  }
+  fclose(executable_file);
+  if (EVP_DigestFinal_ex(context, digest, &digest_size) != 1) {
+    EVP_MD_CTX_free(context);
+    return 0;
+  }
+  EVP_MD_CTX_free(context);
+  for (i = 0; i < (int)digest_size; ++i)
+    snprintf(digest_text + i * 2, 3, "%02x", digest[i]);
+  digest_text[digest_size * 2] = '\0';
+  return strcmp(digest_text, SUPPORTED_RCT_SHA256) == 0;
+}
+
 int rct_memory_provider_open(rct_memory_provider_t* provider) {
   if (provider == NULL) return 0;
   provider->pid = find_rct_pid();
   provider->module_base = provider->pid > 0 ? find_module_base(provider->pid) : 0;
-  return provider->pid > 0 && provider->module_base != 0;
+  provider->identity_valid = provider->pid > 0 && provider->module_base != 0 &&
+                             validate_executable_hash(provider->pid);
+  return provider->identity_valid;
 }
 
 uint32_t rct_memory_provider_read(const rct_memory_provider_t* provider,

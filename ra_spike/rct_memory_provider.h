@@ -7,6 +7,7 @@
 typedef struct rct_memory_provider {
   pid_t pid;
   uintptr_t module_base;
+  int identity_valid;
 } rct_memory_provider_t;
 
 typedef struct rct_state_snapshot {

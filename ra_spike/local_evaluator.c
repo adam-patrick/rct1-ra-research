@@ -7,8 +7,9 @@
 
 typedef struct local_eval_context {
   const rct_state_snapshot_t* snapshot;
-  int triggered;
 } local_eval_context_t;
+
+static int local_triggered;
 
 static uint32_t RC_CCONV local_peek(uint32_t address, uint32_t num_bytes, void* userdata) {
   const local_eval_context_t* context = (const local_eval_context_t*)userdata;
@@ -30,8 +31,10 @@ static uint32_t RC_CCONV local_peek(uint32_t address, uint32_t num_bytes, void* 
 static void RC_CCONV local_event(const rc_runtime_event_t* event) {
   if (event == NULL) return;
   printf("local_event_type=%u id=%u\n", (unsigned)event->type, event->id);
-  if (event->type == RC_RUNTIME_EVENT_ACHIEVEMENT_TRIGGERED)
+  if (event->type == RC_RUNTIME_EVENT_ACHIEVEMENT_TRIGGERED) {
+    local_triggered = 1;
     puts("local_evaluation=triggered");
+  }
 }
 
 int local_evaluator_run(const rct_state_snapshot_t* snapshot) {
@@ -43,7 +46,7 @@ int local_evaluator_run(const rct_state_snapshot_t* snapshot) {
     return 0;
 
   context.snapshot = snapshot;
-  context.triggered = 0;
+  local_triggered = 0;
   rc_runtime_init(&runtime);
 
   /* Test-only condition: Guests >= 1 and Park Rating >= 1. */
@@ -61,5 +64,5 @@ int local_evaluator_run(const rct_state_snapshot_t* snapshot) {
 
   rc_runtime_do_frame(&runtime, local_event, local_peek, &context, NULL);
   rc_runtime_destroy(&runtime);
-  return 1;
+  return local_triggered;
 }

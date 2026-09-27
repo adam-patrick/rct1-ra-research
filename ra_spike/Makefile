@@ -18,13 +18,14 @@ RACHEEVOS_SOURCES := \
 all: rc_client_spike
 
 rc_client_spike: rc_client_spike.c local_evaluator.c local_evaluator.h rct_memory_provider.c rct_memory_provider.h $(RACHEEVOS_SOURCES)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ rc_client_spike.c local_evaluator.c rct_memory_provider.c $(RACHEEVOS_SOURCES) -lm
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ rc_client_spike.c local_evaluator.c rct_memory_provider.c $(RACHEEVOS_SOURCES) -lm -lcrypto
 
 test: rc_client_spike
 	@output=$$(./rc_client_spike --lifecycle); \
 	printf '%s\n' "$$output"; \
 	printf '%s\n' "$$output" | grep -q 'created=1 hardcore=0 network=disabled credentials=absent'; \
-	printf '%s\n' "$$output" | grep -q 'processed_frames=3 destroyed=1'
+	printf '%s\n' "$$output" | grep -q 'processed_frames=3 destroyed=1'; \
+	./rc_client_spike --fixture-test | grep -q 'fixture_test=passed network=disabled'
 
 clean:
 	rm -f rc_client_spike

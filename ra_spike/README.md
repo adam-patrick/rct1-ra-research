@@ -47,6 +47,12 @@ make test
 ./rc_client_spike --local-eval
 ```
 
+`make test` also runs `--fixture-test`, which checks a valid snapshot triggers
+the local condition and an incomplete snapshot is rejected. The live provider
+requires the supported `RCT.EXE` SHA-256
+`bdfebd64383b231de0252fe0726523d1c45aa2c4da919c2d7ed8bfb7aaa05c76`; an
+unrecognized executable fails closed before memory reads.
+
 The dependency is a git submodule so the exact rcheevos revision is recorded
 in the parent repository. Run `git submodule update --init --recursive` after a
 fresh checkout.

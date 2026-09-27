@@ -48,6 +48,7 @@ int main(int argc, char** argv) {
   rct_state_snapshot_t snapshot;
   int rct_state_mode = 0;
   int local_eval_mode = 0;
+  int fixture_mode = 0;
   int frames = 3;
   int i;
 
@@ -56,10 +57,23 @@ int main(int argc, char** argv) {
       rct_state_mode = 1;
     } else if (strcmp(argv[1], "--local-eval") == 0) {
       local_eval_mode = 1;
+    } else if (strcmp(argv[1], "--fixture-test") == 0) {
+      fixture_mode = 1;
     } else if (strcmp(argv[1], "--lifecycle") != 0 || argc > 2) {
-      fprintf(stderr, "usage: %s [--lifecycle|--rct-state|--local-eval]\n", argv[0]);
+      fprintf(stderr, "usage: %s [--lifecycle|--rct-state|--local-eval|--fixture-test]\n", argv[0]);
       return 2;
     }
+  }
+
+  if (fixture_mode) {
+    rct_state_snapshot_t fixture = {7, 500, 96754, 1, 1, 1};
+    rct_state_snapshot_t incomplete = {7, 500, 96754, 0, 1, 1};
+    if (!local_evaluator_run(&fixture) || local_evaluator_run(&incomplete)) {
+      fprintf(stderr, "fixture_test=failed\n");
+      return 7;
+    }
+    puts("fixture_test=passed network=disabled");
+    return 0;
   }
 
   if (rct_state_mode || local_eval_mode) {
