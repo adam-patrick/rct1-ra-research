@@ -1,0 +1,3 @@
+[submodule "ra_spike/deps/rcheevos"]
+	path = ra_spike/deps/rcheevos
+	url = https://github.com/RetroAchievements/rcheevos.git
