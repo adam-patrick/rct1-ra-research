@@ -140,8 +140,44 @@ class App(tk.Tk):
             except OSError: self.inspector.set("Selected address is unavailable (process may have restarted).")
     def bookmark(self):
         if not self.info or self.info.build_status != "Supported" or not self.selected(): return
-        c = self.selected()[0]; label = f"Candidate 0x{c.relative:x}"; loc = {"id": f"candidate_{c.relative:x}", "label": label, "module": "RCT.EXE", "offset": f"0x{c.relative:x}", "type": c.type_name, "status": "candidate", "confidence": "low", "build_hash": self.info.build_hash, "notes": "Saved from GUI scan", "date_discovered": datetime.now(timezone.utc).date().isoformat(), "date_last_validated": None}
-        MetadataStore().save_location(self.info.build_hash, loc); messagebox.showinfo("Bookmark saved", f"Saved {label} to {METADATA_PATH}")
+        c = self.selected()[0]
+        store = MetadataStore(); data = store.load(); locations = data.get("builds", {}).get(self.info.build_hash, {}).get("locations", [])
+        bookmark_id = f"candidate_{c.relative:x}"
+        existing = next((item for item in locations if item.get("id") == bookmark_id), {})
+        details = self.edit_bookmark(existing, c)
+        if details is None: return
+        today = datetime.now(timezone.utc).date().isoformat()
+        loc = {"id": bookmark_id, "label": details["label"], "module": "RCT.EXE", "offset": f"0x{c.relative:x}", "type": c.type_name,
+               "status": details["status"], "confidence": details["confidence"], "build_hash": self.info.build_hash,
+               "notes": details["notes"], "date_discovered": existing.get("date_discovered", today),
+               "date_last_validated": today if details["status"] == "validated" else existing.get("date_last_validated")}
+        store.save_location(self.info.build_hash, loc)
+        messagebox.showinfo("Bookmark saved", f"Saved {details['label']} to {METADATA_PATH}")
+    def edit_bookmark(self, existing, candidate):
+        dialog = tk.Toplevel(self); dialog.title("Add / Edit Bookmark"); dialog.transient(self); dialog.grab_set()
+        fields = {"label": existing.get("label", f"Candidate 0x{candidate.relative:x}"),
+                  "status": existing.get("status", "candidate"), "confidence": existing.get("confidence", "low"),
+                  "notes": existing.get("notes", "")}
+        variables = {name: tk.StringVar(value=value) for name, value in fields.items()}
+        ttk.Label(dialog, text=f"Locator: RCT.EXE + 0x{candidate.relative:x} ({candidate.type_name})").grid(row=0, column=0, columnspan=2, padx=10, pady=8, sticky="w")
+        ttk.Label(dialog, text="Label").grid(row=1, column=0, padx=10, pady=4, sticky="w")
+        ttk.Entry(dialog, textvariable=variables["label"], width=42).grid(row=1, column=1, padx=10, pady=4)
+        ttk.Label(dialog, text="Status").grid(row=2, column=0, padx=10, pady=4, sticky="w")
+        ttk.Combobox(dialog, textvariable=variables["status"], values=["candidate", "observed", "validated", "failed", "deprecated"], state="readonly", width=39).grid(row=2, column=1, padx=10, pady=4)
+        ttk.Label(dialog, text="Confidence").grid(row=3, column=0, padx=10, pady=4, sticky="w")
+        ttk.Combobox(dialog, textvariable=variables["confidence"], values=["low", "medium", "high"], state="readonly", width=39).grid(row=3, column=1, padx=10, pady=4)
+        ttk.Label(dialog, text="Notes").grid(row=4, column=0, padx=10, pady=4, sticky="nw")
+        ttk.Entry(dialog, textvariable=variables["notes"], width=42).grid(row=4, column=1, padx=10, pady=4)
+        result = []
+        def save():
+            label = variables["label"].get().strip()
+            if not label: return messagebox.showwarning("Bookmark", "Label is required.", parent=dialog)
+            result.append({name: variables[name].get().strip() for name in variables}); dialog.destroy()
+        buttons = ttk.Frame(dialog); buttons.grid(row=5, column=0, columnspan=2, pady=10)
+        ttk.Button(buttons, text="Save", command=save).pack(side="left", padx=5)
+        ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="left", padx=5)
+        self.wait_window(dialog)
+        return result[0] if result else None
     def watch_selected(self):
         for c in self.selected():
             if c not in self.watches: self.watches.append(c)

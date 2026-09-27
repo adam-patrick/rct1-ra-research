@@ -30,6 +30,10 @@ addresses are always displayed both absolutely and as module-relative offsets.
 Use Add bookmark for a research candidate and Watch selected for occasional
 manual refresh.
 
+Add bookmark opens an editor for the human-readable label, status, confidence,
+and notes. Existing bookmark metadata is prefilled when editing the same
+candidate; the stable build-scoped ID and module-relative locator are retained.
+
 Searches may optionally specify a module-relative range such as `0x69c000`
 to `0x69d000`. The range applies to new scans and existing candidate/baseline
 filters. Candidate rows retain a compact value history across filters, which
