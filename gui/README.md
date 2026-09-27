@@ -1,5 +1,21 @@
 # RCT1 read-only research GUI
 
+## Current GUI Features
+
+- Detects the running `RCT.EXE` process and current module base.
+- Validates the supported executable hash and displays build status.
+- Reads validated Cash, Guest Count, and Park Rating fields.
+- Runs Exact and Unknown scans with signed/unsigned 8-, 16-, and 32-bit types.
+- Filters candidates by Changed, Unchanged, Increased, Decreased, and known delta.
+- Supports background scans, cancellation, bounded results, and memory-safe table rendering.
+- Supports module-relative scan ranges and candidate value history.
+- Provides sortable candidate columns and read-only neighborhood inspection.
+- Supports watches with persistent visual row highlighting.
+- Supports editable, build-scoped bookmarks with labels, status, confidence, notes, and locator facts.
+- Provides a live bookmark review window with refresh and edit actions.
+- Supports continuous one-second refinement filtering.
+- Saves and loads build-scoped JSON scan sessions.
+
 This is a small Python/Tkinter frontend for the existing evidence-driven RCT1
 research workflow. It detects `RCT.EXE`, derives the current module base from
 `/proc/<pid>/maps`, validates the executable SHA-256, reads validated state,
