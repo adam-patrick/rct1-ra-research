@@ -53,6 +53,7 @@ class App(tk.Tk):
         ttk.Button(bottom, text="Refresh watches", command=self.refresh_watches).pack(side="left", padx=3)
         ttk.Button(bottom, text="Save session", command=self.save_session).pack(side="left", padx=3)
         ttk.Button(bottom, text="Load session", command=self.load_session).pack(side="left", padx=3)
+        ttk.Button(bottom, text="Review bookmarks", command=self.review_bookmarks).pack(side="left", padx=3)
         self.inspector = tk.StringVar(value="Select a candidate for read-only neighborhood inspection."); ttk.Label(bottom, textvariable=self.inspector).pack(side="left", padx=15)
     def refresh_status(self):
         old = self.info.pid if self.info else None
@@ -192,6 +193,43 @@ class App(tk.Tk):
         ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side="left", padx=5)
         self.wait_window(dialog)
         return result[0] if result else None
+    def review_bookmarks(self):
+        if not self.info or self.info.build_status != "Supported":
+            return messagebox.showwarning("Bookmarks", "Connect to the supported RCT.EXE build first.")
+        data = MetadataStore().load()
+        locations = data.get("builds", {}).get(self.info.build_hash, {}).get("locations", [])
+        window = tk.Toplevel(self); window.title("RCT1 Bookmarks"); window.geometry("1050x420"); window.transient(self)
+        columns = ("label", "address", "relative", "type", "current", "status", "confidence", "notes")
+        table = ttk.Treeview(window, columns=columns, show="headings", selectmode="browse")
+        for column in columns:
+            table.heading(column, text=column.replace("_", " ").title())
+            table.column(column, width=130 if column not in ("notes", "label") else 220)
+        table.pack(fill="both", expand=True, padx=8, pady=8)
+        def refresh():
+            table.delete(*table.get_children())
+            for index, location in enumerate(locations):
+                offset = int(location["offset"], 16); address = resolve_address(self.info.base, offset)
+                try:
+                    raw = interpret(self.provider.read(address, TYPES[location["type"]][0]), location["type"])
+                    current = format_cash(raw) if location.get("scale") == "raw / 10" else str(raw)
+                except (KeyError, OSError): current = "unavailable"
+                table.insert("", "end", iid=str(index), values=(location.get("label", ""), f"0x{address:08x}", f"+0x{offset:x}", location.get("type", ""), current, location.get("status", ""), location.get("confidence", ""), location.get("notes", "")))
+        def edit_selected():
+            selection = table.selection()
+            if not selection: return
+            location = locations[int(selection[0])]
+            candidate = Candidate(resolve_address(self.info.base, int(location["offset"], 16)), int(location["offset"], 16), location["type"], 0, 0)
+            details = self.edit_bookmark(location, candidate)
+            if details is None: return
+            today = datetime.now(timezone.utc).date().isoformat()
+            location.update(details)
+            if details["status"] == "validated": location["date_last_validated"] = today
+            MetadataStore().save_location(self.info.build_hash, location); refresh()
+        buttons = ttk.Frame(window); buttons.pack(fill="x", padx=8, pady=(0, 8))
+        ttk.Button(buttons, text="Refresh", command=refresh).pack(side="left", padx=3)
+        ttk.Button(buttons, text="Edit selected", command=edit_selected).pack(side="left", padx=3)
+        ttk.Button(buttons, text="Close", command=window.destroy).pack(side="right", padx=3)
+        refresh()
     def watch_selected(self):
         for c in self.selected():
             self.watch_keys.add((c.relative, c.type_name))

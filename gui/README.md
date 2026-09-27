@@ -42,6 +42,11 @@ Use `Clear/New scan` to discard the current candidates, baseline, history, and
 watched rows without closing the GUI. Bookmarks and the process connection are
 preserved.
 
+Use `Review bookmarks` to open a build-scoped bookmark window showing the
+current runtime address, module-relative offset, type, current value, status,
+confidence, and notes. The window supports refreshing values and editing the
+selected bookmark.
+
 Searches may optionally specify a module-relative range such as `0x69c000`
 to `0x69d000`. The range applies to new scans and existing candidate/baseline
 filters. Candidate rows retain a compact value history across filters, which
