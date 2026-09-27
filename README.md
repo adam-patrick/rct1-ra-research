@@ -4,10 +4,11 @@ Research, experiments, and small read-only tools for investigating whether the
 original RollerCoaster Tycoon Deluxe (`RCT.EXE`) can support a reliable
 RetroAchievements integration.
 
-This is an early-stage reverse-engineering and runtime-state discovery project.
-It is deliberately conservative: the current work observes the game and
-documents evidence before attempting achievement logic, injection, patching, or
-network integration.
+This is a conservative reverse-engineering and runtime-state discovery project.
+Local rcheevos feasibility has now been demonstrated in an isolated spike, but
+production RA communication, authentication, and unlock submission remain
+disabled while official standalone identity, approval, and Hardcore questions
+are investigated.
 
 ## Current status
 
@@ -27,8 +28,9 @@ validated achievement implementation.
 - The recommended architecture remains an external read-only helper, not an
   injected DLL or binary patch.
 
-**Next milestone:** validate all three fields together in one additional fresh
-launch, then investigate scenario/objective state.
+**Next milestone:** review the [standalone proposal draft](docs/rct1_standalone_ra_proposal_draft.md)
+and, if appropriate, seek initial RA guidance. Scenario/objective memory
+discovery continues as a separate future workstream.
 
 ## Launching RCT1
 
@@ -113,17 +115,20 @@ other copyrighted game assets. A legitimate local copy and a compatible runtime
 may be required to reproduce the experiments.
 
 RetroAchievements integration, achievement definitions, authentication, and
-unlock writes are out of scope until the underlying runtime state is understood
-and validated.
+unlock writes remain intentionally disabled. Local rcheevos feasibility is
+documented in the isolated `ra_spike/`; official standalone identity,
+approval, Hardcore policy, and complete RCT state coverage are unresolved.
 
 ## Roadmap
 
-1. Validate the guest-count representation once more and preserve snapshot evidence.
-2. Identify scenario and success/failure state transitions.
+1. Review the technical feasibility/proposal package and unresolved RA questions.
+2. If guidance supports continuing, identify scenario and success/failure state
+   transitions with the existing read-only tools.
 3. Model ride objects well enough to evaluate coaster excitement.
-4. Build a small external state evaluator with executable and scenario
-  identity checks.
-5. Reassess RetroAchievements integration only after the evaluator is stable.
+4. Extend the versioned external state evaluator with executable, scenario, and
+   save identity checks.
+5. Keep production RA communication disabled until identity and policy guidance
+   is received.
 
 ## Reports
 
