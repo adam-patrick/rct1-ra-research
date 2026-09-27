@@ -208,10 +208,10 @@ Final documentation should record:
 
 The goal is a reproducible field definition, not merely a surviving table row.
 
-## 11. Planned typed-memory viewer
+## 11. Typed-memory viewer
 
-The next engineering step is a read-only viewer for a selected candidate or
-bookmark. It should display the surrounding raw bytes and decode them as:
+The GUI now provides a read-only viewer for a selected candidate or bookmark.
+It displays a bounded neighborhood of raw bytes and decodes them as:
 
 - individual `u8`/`s8` values;
 - little-endian `u16`/`s16` values;
@@ -234,5 +234,22 @@ u32 LE: 66536
 The viewer must remain read-only. It should either update live while the game
 is running or provide an explicit refresh action; a refresh timestamp and the
 current PID/module base should be visible so stale observations are not
-mistaken for current values. The first implementation should focus on a
-candidate neighborhood/bookmark, not broad unbounded memory rendering.
+mistaken for current values. The first implementation focuses on a candidate
+neighborhood/bookmark, not broad unbounded memory rendering. It provides a
+manual Refresh action and an optional one-second live-refresh mode.
+
+### Next viewer enhancement
+
+Keep the current decoded table, but add a second presentation modeled on the
+memory-grid view used by tools such as the screenshot reference:
+
+- address column with grouped hexadecimal bytes;
+- selectable 8-bit, 16-bit, and 32-bit display modes;
+- visible bit positions and little-endian grouping;
+- automatic live updates enabled by default while the window is open;
+- a control to pause live updates, plus manual Refresh as a fallback.
+
+The view must remain bounded to the selected candidate/bookmark neighborhood
+and read-only. A pause/unpause flag should therefore change in the viewer
+automatically when the game changes it, without requiring the user to press
+Refresh.

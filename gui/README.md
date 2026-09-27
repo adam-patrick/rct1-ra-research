@@ -18,6 +18,9 @@
 - Provides a readable-private-memory region picker for filling scan ranges.
 - Supports continuous one-second refinement filtering.
 - Saves and loads build-scoped JSON scan sessions.
+- Opens a bounded typed-memory viewer for a selected candidate or bookmark,
+  showing raw bytes, ASCII, and signed/unsigned little-endian 8-, 16-, and
+  32-bit interpretations with manual or one-second live refresh.
 
 This is a small Python/Tkinter frontend for the existing evidence-driven RCT1
 research workflow. It detects `RCT.EXE`, derives the current module base from
@@ -70,7 +73,11 @@ range controls for targeted scans.
 Use `Review bookmarks` to open a build-scoped bookmark window showing the
 current runtime address, module-relative offset, type, current value, status,
 confidence, and notes. The window supports refreshing values and editing the
-selected bookmark.
+selected bookmark. Select a bookmark and use `Typed memory view` to inspect its
+surrounding bytes without writing to the process. The candidate table has the
+same viewer action for a selected candidate. The viewer displays the current
+PID, module base, and refresh timestamp; live refresh is bounded to the small
+neighborhood around the selected address.
 
 Searches may optionally specify a module-relative range such as `0x69c000`
 to `0x69d000`. The range applies to new scans and existing candidate/baseline

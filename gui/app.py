@@ -54,6 +54,7 @@ class App(tk.Tk):
         scroll = ttk.Scrollbar(frame, command=self.table.yview); scroll.pack(side="right", fill="y"); self.table.configure(yscrollcommand=scroll.set)
         bottom = ttk.Frame(self); bottom.pack(fill="x", padx=8, pady=5)
         ttk.Button(bottom, text="Add bookmark", command=self.bookmark).pack(side="left", padx=3)
+        ttk.Button(bottom, text="Typed memory view", command=self.view_selected_memory).pack(side="left", padx=3)
         ttk.Button(bottom, text="Watch selected", command=self.watch_selected).pack(side="left", padx=3)
         ttk.Button(bottom, text="Refresh watches", command=self.refresh_watches).pack(side="left", padx=3)
         ttk.Button(bottom, text="Save session", command=self.save_session).pack(side="left", padx=3)
@@ -208,6 +209,52 @@ class App(tk.Tk):
             c = selected[0]
             try: data = self.provider.read(max(0, c.address - 16), 32); self.inspector.set(f"0x{c.address:08x} (+0x{c.relative:x})  {data.hex(' ')}  [read-only neighborhood ±16 bytes]")
             except OSError: self.inspector.set("Selected address is unavailable (process may have restarted).")
+    def view_selected_memory(self):
+        selected = self.selected()
+        if not selected or not self.provider:
+            return messagebox.showinfo("Typed memory view", "Select a candidate first.")
+        candidate = selected[0]
+        self.open_memory_view(candidate.address, candidate.relative, candidate.label or candidate.type_name)
+    def open_memory_view(self, address, relative, label=""):
+        window = tk.Toplevel(self); window.title("RCT1 Typed Memory Viewer"); window.geometry("980x620"); window.transient(self)
+        header = tk.StringVar(); timestamp = tk.StringVar()
+        ttk.Label(window, textvariable=header, justify="left").pack(anchor="w", padx=8, pady=(8, 2))
+        ttk.Label(window, textvariable=timestamp).pack(anchor="w", padx=8, pady=(0, 5))
+        controls = ttk.Frame(window); controls.pack(fill="x", padx=8, pady=3)
+        radius = tk.IntVar(value=16); live = tk.BooleanVar(value=False); live_job = [None]
+        ttk.Label(controls, text="Bytes around address:").pack(side="left")
+        ttk.Combobox(controls, textvariable=radius, values=[8, 16, 32], state="readonly", width=5).pack(side="left", padx=4)
+        table = ttk.Treeview(window, columns=("offset", "address", "byte", "ascii", "u8", "s8", "u16", "s16", "u32", "s32"), show="headings")
+        headings = {"offset": "Offset", "address": "Address", "byte": "Byte", "ascii": "ASCII", "u8": "u8", "s8": "s8", "u16": "u16 LE", "s16": "s16 LE", "u32": "u32 LE", "s32": "s32 LE"}
+        for column in table["columns"]:
+            table.heading(column, text=headings[column]); table.column(column, width=88, anchor="center")
+        table.column("address", width=115); table.column("byte", width=70); table.column("ascii", width=65)
+        table.pack(fill="both", expand=True, padx=8, pady=5)
+        def refresh():
+            if not self.info or not self.provider or self.info.pid != self.provider.info.pid:
+                header.set("Process unavailable or restarted; close this viewer."); return
+            start = max(0, address - radius.get()); size = radius.get() * 2 + 16
+            try: data = self.provider.read(start, size)
+            except OSError:
+                header.set("Selected address is unavailable (process may have restarted)."); return
+            header.set(f"{label or 'Memory'}   address 0x{address:08x}   relative +0x{relative:x}\nPID {self.info.pid}   module base 0x{self.info.base:08x}   read-only")
+            timestamp.set(f"Refreshed {datetime.now(timezone.utc).isoformat(timespec='seconds')}   ({len(data)} bytes; interpretations are little-endian)")
+            table.delete(*table.get_children())
+            for row in typed_memory_rows(data):
+                absolute = start + int(row["offset"])
+                table.insert("", "end", values=(f"{int(row['offset']) - (address - start):+d}", f"0x{absolute:08x}", row["byte"], row["ascii"], row["u8"], row["s8"], row["u16"], row["s16"], row["u32"], row["s32"]))
+            if live.get(): live_job[0] = window.after(1000, refresh)
+        def toggle_live():
+            if live.get(): refresh()
+            elif live_job[0] is not None:
+                window.after_cancel(live_job[0]); live_job[0] = None
+        def close():
+            if live_job[0] is not None: window.after_cancel(live_job[0])
+            window.destroy()
+        ttk.Button(controls, text="Refresh", command=refresh).pack(side="left", padx=4)
+        ttk.Checkbutton(controls, text="Live refresh (1s)", variable=live, command=toggle_live).pack(side="left", padx=4)
+        ttk.Button(controls, text="Close", command=close).pack(side="right", padx=4)
+        window.protocol("WM_DELETE_WINDOW", close); refresh()
     def bookmark(self):
         if not self.info or self.info.build_status != "Supported" or not self.selected(): return
         store = MetadataStore(); data = store.load(); locations = data.get("builds", {}).get(self.info.build_hash, {}).get("locations", [])
@@ -273,6 +320,12 @@ class App(tk.Tk):
                     current = format_cash(raw) if location.get("scale") == "raw / 10" else str(raw)
                 except (KeyError, OSError): current = "unavailable"
                 table.insert("", "end", iid=str(index), values=(location.get("label", ""), f"0x{address:08x}", f"+0x{offset:x}", location.get("type", ""), current, location.get("status", ""), location.get("confidence", ""), location.get("notes", "")))
+        def view_selected():
+            selection = table.selection()
+            if not selection: return
+            location = locations[int(selection[0])]
+            offset = int(location["offset"], 16)
+            self.open_memory_view(resolve_address(self.info.base, offset), offset, location.get("label", "Bookmark"))
         def edit_selected():
             selection = table.selection()
             if not selection: return
@@ -286,6 +339,7 @@ class App(tk.Tk):
             MetadataStore().save_location(self.info.build_hash, location); refresh()
         buttons = ttk.Frame(window); buttons.pack(fill="x", padx=8, pady=(0, 8))
         ttk.Button(buttons, text="Refresh", command=refresh).pack(side="left", padx=3)
+        ttk.Button(buttons, text="Typed memory view", command=view_selected).pack(side="left", padx=3)
         ttk.Button(buttons, text="Edit selected", command=edit_selected).pack(side="left", padx=3)
         ttk.Button(buttons, text="Close", command=window.destroy).pack(side="right", padx=3)
         refresh()

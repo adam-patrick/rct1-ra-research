@@ -8,6 +8,10 @@ class GuiLogicTests(unittest.TestCase):
     def test_interpret_signed_and_unsigned(self):
         self.assertEqual(interpret(b"\xff", "u8"), 255); self.assertEqual(interpret(b"\xff", "s8"), -1)
         self.assertEqual(interpret(b"\xff\xff", "s16"), -1)
+    def test_typed_memory_rows_are_little_endian(self):
+        row = typed_memory_rows(bytes.fromhex("e8 03 01 00"))[0]
+        self.assertEqual(row["u8"], 232); self.assertEqual(row["s8"], -24)
+        self.assertEqual(row["u16"], 1000); self.assertEqual(row["u32"], 66536)
     def test_addresses_and_cash(self):
         self.assertEqual(resolve_address(0x400000, 0x69c590), 0xa9c590); self.assertEqual(format_cash(93160), "$9,316.00")
     def test_metadata_round_trip(self):

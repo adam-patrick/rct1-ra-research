@@ -57,6 +57,19 @@ def interpret(data: bytes, type_name: str) -> int:
     width, signed = TYPES[type_name]
     return int.from_bytes(data[:width], "little", signed=signed)
 
+def typed_memory_rows(data: bytes) -> list[dict[str, object]]:
+    """Return bounded, read-only little-endian interpretations for a byte view."""
+    rows = []
+    for offset, value in enumerate(data):
+        row = {"offset": offset, "byte": f"{value:02x}",
+               "ascii": chr(value) if 32 <= value < 127 else ".",
+               "u8": value, "s8": value if value < 0x80 else value - 0x100}
+        for name in ("u16", "s16", "u32", "s32"):
+            width = TYPES[name][0]
+            row[name] = interpret(data[offset:offset + width], name) if offset + width <= len(data) else ""
+        rows.append(row)
+    return rows
+
 def resolve_address(base: int, offset: int) -> int:
     return base + offset
 
